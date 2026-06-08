@@ -6,73 +6,78 @@
   <title>AI 奧客應對演練 · Karen Simulator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Syne:wght@600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700;800;900&family=Syne:wght@600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div class="wrap">
-    <!-- ── Hero ── -->
-    <header class="hero">
-      <div class="kicker">CRISIS&nbsp;COMMUNICATION&nbsp;TRAINER</div>
-      <h1 class="wordmark">奧客應對演練<span class="dot">.</span></h1>
-      <div class="subwordmark">AI&nbsp;KAREN&nbsp;SIMULATOR</div>
-      <p class="tagline">AI 即時情緒模擬 × 危機溝通訓練 —— 你是店員,在有限回合內安撫一位 AI 奧客。</p>
-      <nav class="tabs">
-        <button class="tab is-active" data-view="select">演練</button>
-        <button class="tab" data-view="history">歷史紀錄</button>
-      </nav>
-    </header>
+  <!-- ── 頂部導覽(AKARU 風:彩點 + 粗體)── -->
+  <nav class="topnav">
+    <div class="brand" data-view="select">KAREN&nbsp;SIM<span class="dot">.</span></div>
+    <div class="navlinks">
+      <button class="navlink is-active" data-view="select"><i style="--c:#FE494A"></i>演練</button>
+      <button class="navlink" data-view="history"><i style="--c:#D480C0"></i>歷史紀錄</button>
+    </div>
+  </nav>
 
-    <!-- ── 選關卡 ── -->
-    <section id="view-select" class="view">
-      <div class="section-head"><h2>選擇你的對手</h2><span class="rule"></span></div>
-      <div id="scenario-grid" class="card-grid"></div>
-    </section>
-
-    <!-- ── 遊戲 ── -->
-    <section id="view-game" class="view hidden">
-      <div class="game-grid">
-        <aside class="game-side">
-          <div class="okeke-card" id="okeke-card"></div>
-          <div class="meter-card" id="meter-card"></div>
-          <button id="quit" class="btn-ghost full">↩ 換一關</button>
-        </aside>
-        <main class="game-main">
-          <div id="chat" class="chat"></div>
-          <div class="composer">
-            <input id="msg" type="text" autocomplete="off"
-                   placeholder="輸入你要對奧客說的話…" disabled />
-            <button id="send" class="btn-red" disabled>送出</button>
-          </div>
-        </main>
+  <!-- ── 選關卡:AKARU 分割版面(左大字標 + 右橫向滾動奧客)── -->
+  <section id="view-select" class="view akaru-scene">
+    <div class="akaru-viewport" id="akaru-viewport">
+      <div class="h-track" id="h-track">
+        <div class="panel panel-intro">
+          <div class="kicker">CRISIS&nbsp;COMMUNICATION&nbsp;TRAINER</div>
+          <h1 class="akaru-mark">KAREN<br />SIMULATOR<span class="dot">.</span></h1>
+          <p class="akaru-desc">AI 即時情緒模擬 × 危機溝通訓練。<br />在有限回合內安撫一位奧客。</p>
+          <div class="akaru-foot"><span>● 回合制</span><span>● 即時憤怒值</span><span>● AI 評審報告</span></div>
+          <div class="akaru-cue">滾動滑鼠 · 對手從右側登場 &rarr;</div>
+        </div>
+        <!-- 奧客 panels 由 app.js 注入 -->
       </div>
-    </section>
+    </div>
+    <div class="scroll-progress"><span id="scroll-bar"></span></div>
+  </section>
 
-    <!-- ── 歷史紀錄 ── -->
-    <section id="view-history" class="view hidden">
-      <div class="section-head"><h2>歷史紀錄</h2><span class="rule"></span>
-        <button id="history-refresh" class="btn-ghost sm">↻ 重新整理</button></div>
-      <div id="history-grid" class="card-grid"></div>
-      <div id="history-detail" class="hidden"></div>
-    </section>
+  <!-- ── 遊戲 ── -->
+  <section id="view-game" class="view hidden">
+    <div class="game-grid">
+      <aside class="game-side">
+        <div class="okeke-card" id="okeke-card"></div>
+        <div class="meter-card" id="meter-card"></div>
+        <button id="quit" class="btn-ghost full">↩ 換一關</button>
+      </aside>
+      <main class="game-main">
+        <div id="chat" class="chat"></div>
+        <div class="composer">
+          <input id="msg" type="text" autocomplete="off" placeholder="輸入你要對奧客說的話…" disabled />
+          <button id="send" class="btn-red" disabled>送出</button>
+        </div>
+      </main>
+    </div>
+  </section>
 
-    <!-- ── Footer(深藍灰 + 蘭花粉字標,照 CineRooms)── -->
-    <footer class="footer">
+  <!-- ── 歷史紀錄 ── -->
+  <section id="view-history" class="view hidden">
+    <div class="section-head"><h2>歷史紀錄</h2><span class="rule"></span>
+      <button id="history-refresh" class="btn-ghost sm">↻ 重新整理</button></div>
+    <div id="history-grid" class="card-grid"></div>
+    <div id="history-detail" class="hidden"></div>
+  </section>
+
+  <!-- ── Footer(深藍灰 + 蘭花粉字標)── -->
+  <footer class="footer">
+    <div class="footer-inner">
       <div class="footer-mark">奧客應對演練</div>
       <p class="footer-tag">是我的危機溝通訓練場</p>
       <span class="footer-rule"></span>
-      <p class="footer-desc">AI 即時情緒模擬 × 危機溝通訓練。設計語言改編自我的 CineRooms 影評日誌
-        —— 暖奶油紙底、珊瑚紅強調、窄體大標。</p>
+      <p class="footer-desc">AI 即時情緒模擬 × 危機溝通訓練。設計語言改編自我的 CineRooms 影評日誌,版面取法 AKARU。</p>
       <p class="footer-copy">© 2026 · Kaiser0207 · 為熱愛溝通的你練心打造</p>
-    </footer>
-  </div>
+    </div>
+  </footer>
 
   <!-- ── 評審報告(覆蓋層)── -->
   <div id="report" class="report-overlay hidden">
     <div class="report-card" id="report-card"></div>
   </div>
 
-  <!-- ── Toast ── -->
   <div id="toast" class="toast hidden"></div>
 
   <script src="/app.js"></script>

@@ -53,6 +53,16 @@
   `fracFor(d)` 依 `索引−curF` 給寬度;大名在外框長到 >40% 才淡入(`smooth((frac−0.40)/0.20)`)。
 - 結構調整:`.panel-okeke` 拆出 `.okeke-inner`(grid),`.panel-soon` 拆出 `.soon-inner`;移除各 panel 固定 `width`/`min-width`。
 
+### 2026-06-09 AKARU 進場細節(依截圖回饋)
+- **標題改「往左推出」**(非淡化):`.intro-inner` 不再動 opacity,改 `translateX(-(TITLE-frac)*VW)`,
+  隨焦點離開整塊左移、被外框裁切離場。
+- **圖示置中**:奧客 panel 改 `.okeke-visual{position:absolute;inset:0}` 鋪滿整個 panel(色塊變寬、emoji `left:50%` 永遠在 panel 中央)。
+- **米色資訊條一開始不出現、滾動才上滑**:底部 `.foot-panel`(米色)`position:absolute;bottom:0`,
+  初始 `translateY(100%)` 藏在下方,接近占主畫面時整條由下往上滑入(蓋住色塊底部)。
+- **標籤/大名改階梯式上滑、無淡化**:初始憤怒、回合、大名各自包 `.rev` 遮罩 + `translateY(118%)`,
+  依焦點量 `a` 錯開門檻(`a-0.30-k*0.16`)逐格上滑 → 像階梯一格一格出來,不再用 opacity。
+- **滾動太靈敏**:`STEP 480 → 1100`(滾輪滾一點點不再衝太快)。
+
 ### 待辦
-- 依實際畫面微調手感(lerp 0.12、STEP 480、焦點寬 0.60/下一關 0.40、名字淡入門檻)、行動裝置觸控。
+- 依實際畫面微調手感(STEP 1100、lerp 0.12、揭露門檻/錯開量、焦點寬 0.60/下一關 0.40)、行動裝置觸控。
 - Phase 5 TTS(主線,仍未動)。

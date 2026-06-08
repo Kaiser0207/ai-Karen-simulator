@@ -47,15 +47,18 @@ function okekePanel(s, i) {
   const num = String(i + 1).padStart(2, "0");
   const p = el(`
     <div class="panel panel-okeke">
-      <div class="okeke-inner">
-        <div class="okeke-visual" style="background:${st.grad}">
-          <span class="num">${num}</span>
-          <span class="s-genre">${s.genre}</span>
-          <span class="emoji">${st.emoji}</span>
-        </div>
-        <div class="okeke-foot">
-          <div class="okeke-tags"><span class="tag">初始憤怒 ${s.initial_anger}</span><span class="tag">${s.max_turns} 回合</span></div>
-          <h2 class="okeke-bigname">${s.name}</h2>
+      <div class="okeke-visual" style="background:${st.grad}">
+        <span class="num">${num}</span>
+        <span class="s-genre">${s.genre}</span>
+        <span class="emoji">${st.emoji}</span>
+      </div>
+      <div class="okeke-foot">
+        <div class="foot-panel">
+          <div class="okeke-tags">
+            <span class="rev"><span class="tag">初始憤怒 ${s.initial_anger}</span></span>
+            <span class="rev"><span class="tag">${s.max_turns} 回合</span></span>
+          </div>
+          <span class="rev rev-block"><h2 class="okeke-bigname">${s.name}</h2></span>
           <button class="okeke-start" type="button">開始<br/>挑戰</button>
         </div>
       </div>
@@ -93,7 +96,7 @@ function initHScroll() {
     return STRIP2;                                       // 遠處皆細條
   }
 
-  const STEP = 480;                                     // 推進一關所需的滾輪量(px)
+  const STEP = 1100;                                    // 推進一關所需的滾輪量(px,大=較不靈敏/較慢)
   let accum = 0, targetF = 0, curF = 0, raf = null;
   function frame() {
     curF += (targetF - curF) * 0.12;                    // lerp:小=更滑、慣性更長
@@ -103,15 +106,19 @@ function initHScroll() {
       const frac = fracFor(p, i - curF);
       p.style.flexBasis = (frac * VW).toFixed(1) + "px";
       if (p.classList.contains("panel-intro")) {
+        // 標題隨焦點離開「往左推出」(非淡化):整塊內容左移、被外框裁切
         const inner = p.querySelector(".intro-inner");
-        if (inner) inner.style.opacity = smooth(frac / TITLE);
+        if (inner) inner.style.transform = `translateX(${(-(TITLE - frac) * VW).toFixed(1)}px)`;
       } else {
-        const name = p.querySelector(".okeke-bigname");
-        if (name) {
-          const r = smooth((frac - NEXT) / (FOCUS - NEXT)); // 長到 >40%(接近占主畫面)文字才浮現
-          name.style.opacity = r;
-          name.style.transform = `translateY(${((1 - r) * 14).toFixed(1)}px)`;
-        }
+        // 接近占主畫面時:米色資訊條由下往上滑入,內含項目再「階梯式」錯開上滑(皆無淡化)
+        const a = smooth((frac - 0.42) / (FOCUS - 0.42));   // 0(下一關 42%)→ 1(焦點 60%)
+        const fp = p.querySelector(".foot-panel");
+        if (fp) fp.style.transform = `translateY(${((1 - smooth(a / 0.45)) * 100).toFixed(1)}%)`;
+        p.querySelectorAll(".rev").forEach((r, k) => {
+          const child = r.firstElementChild; if (!child) return;
+          const pk = smooth((a - 0.30 - k * 0.16) / 0.30); // 每格門檻錯開 → 一格一格像階梯
+          child.style.transform = `translateY(${((1 - pk) * 118).toFixed(1)}%)`;
+        });
       }
     });
     if (bar) bar.style.width = (N > 1 ? (curF / (N - 1)) * 100 : 0).toFixed(2) + "%";

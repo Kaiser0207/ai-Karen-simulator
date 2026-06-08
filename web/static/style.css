@@ -65,7 +65,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 /* 開場 panel:大字標(外框寬由 JS 控,標題隨焦點離開縮成左側細條)*/
 .panel-intro { display: flex; align-items: flex-end; }
 .intro-inner { width: 52vw; flex: 0 0 auto; padding: 48px 50px 56px;
-  display: flex; flex-direction: column; justify-content: flex-end; will-change: opacity; }
+  display: flex; flex-direction: column; justify-content: flex-end; will-change: transform; }
 .kicker { font-family: var(--f-mono); font-size: 12px; font-weight: 700;
   letter-spacing: .26em; color: var(--red); margin-bottom: 18px; white-space: nowrap; }
 .akaru-mark { font-family: var(--f-display); font-weight: 700; font-style: normal;
@@ -78,10 +78,9 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   letter-spacing: .14em; color: var(--red); animation: nudge 1.6s ease-in-out infinite; }
 @keyframes nudge { 0%,100% { transform: translateX(0); } 50% { transform: translateX(9px); } }
 
-/* 奧客 panel:外框裁切;內層固定 60vw(= 焦點寬),上半漸層視覺 + 下半大名(仿 AKARU 專案頁)*/
-.panel-okeke { border-left: 1px solid var(--border); cursor: pointer; }
-.okeke-inner { width: 60vw; height: 100%; display: grid; grid-template-rows: 1fr auto; }
-.okeke-visual { position: relative; overflow: hidden; }
+/* 奧客 panel:整塊色塊視覺(圖示置中於 panel)+ 底部米色資訊條(滾動時由下往上滑入)*/
+.panel-okeke { position: relative; overflow: hidden; border-left: 1px solid var(--border); cursor: pointer; }
+.okeke-visual { position: absolute; inset: 0; overflow: hidden; }
 .okeke-visual::after { content: ""; position: absolute; inset: 0;
   background: linear-gradient(125deg, rgba(255,255,255,.06), rgba(14,14,14,.10)); }
 .okeke-visual .num { position: absolute; top: 26px; left: 30px; z-index: 1;
@@ -89,19 +88,27 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .okeke-visual .s-genre { position: absolute; top: 26px; right: 30px; z-index: 1; font-family: var(--f-mono);
   font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink);
   background: rgba(255,255,255,.55); border: 1px solid rgba(14,14,14,.18); padding: 5px 12px; border-radius: 999px; }
+/* 圖示置中於 panel(色塊鋪滿整個 panel,故 50% 即 panel 中央)*/
 .okeke-visual .emoji { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
   font-size: clamp(4rem, 9vw, 7.5rem); filter: drop-shadow(0 6px 22px rgba(0,0,0,.45)); transition: transform .5s cubic-bezier(.22,1,.36,1); }
 .panel-okeke:hover .okeke-visual .emoji { transform: translate(-50%,-50%) scale(1.1); }
-.okeke-foot { background: var(--card2); padding: 22px 30px 30px; position: relative;
-  display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+
+/* 底部米色資訊條:整條由下往上滑入(JS 控 transform,初始藏在下方)*/
+.okeke-foot { position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden; z-index: 2; }
+.foot-panel { position: relative; width: 60vw; background: var(--card2); padding: 22px 30px 30px;
+  display: flex; flex-direction: column; gap: 12px; align-items: flex-start;
+  transform: translateY(100%); will-change: transform; }
 .okeke-tags { display: flex; gap: 10px; }
 .okeke-tags .tag { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; color: var(--muted);
   border: 1px solid var(--border-2); border-radius: 999px; padding: 4px 12px; }
-/* AKARU 式白盒大名 */
+/* 階梯式揭露:每格用遮罩 + translateY,由下往上「跑」出來(無淡化),JS 依捲動進度錯開 */
+.rev { display: inline-block; overflow: hidden; vertical-align: bottom; }
+.rev-block { display: block; }
+.rev > * { transform: translateY(118%); will-change: transform; }
+/* AKARU 式白盒大名(不淡化,靠遮罩上滑揭露)*/
 .okeke-bigname { display: inline-block; font-family: var(--f-head); font-weight: 800;
   font-size: clamp(1.8rem, 3.6vw, 3rem); line-height: 1.06; margin: 2px 0 0; color: var(--ink);
-  background: #fff; padding: 6px 14px; max-width: 92%;
-  opacity: 0; will-change: opacity, transform; }
+  background: #fff; padding: 6px 14px; max-width: 92%; }
 .okeke-start { position: absolute; right: 30px; bottom: 28px; width: 86px; height: 86px; border-radius: 50%;
   background: var(--ink); color: #F0EAD6; border: none; cursor: pointer; line-height: 1.15;
   font-family: var(--f-head); font-weight: 700; font-size: .85rem; box-shadow: var(--shadow);

@@ -100,6 +100,22 @@
 - **只准點「開始挑戰」鈕進關**:click 從整個 panel 移到鈕上(移除 `.panel-okeke` 的 cursor:pointer),
   修掉「點面板任何地方/滾動誤觸都會進關」的 bug。
 
+### 2026-06-09 全面審查 + 強化(branch `feat/review-hardening`)
+派兩個 review agent(後端/前端)做完整性掃描,確認 + 修真實問題(過濾掉誤報,如「RAF 無限跑」其實會自停、「Enter 連點雙送」因 busy 在 await 前就設而不會發生)。
+- **整合確認**:朋友的 Gradio `app.py` 不受後端改動影響(它用自己的 `gr.State` 累加 anger/emotion,且 `init` 已帶 `emotion_history:[]`;classify_ending 改動只改「何時結束」,由 `ending_type` 處理)。**未改 app.py**。
+- 後端強化:
+  - `loader._validate_scenario`:載入即驗證關卡必備欄位 + 三結局台詞,缺了就明確報錯(不再拖到中途 KeyError)。
+  - prompt 骨架/評審 prompt **啟動快取**(不每次讀檔)。
+  - `set_ending` 缺結局台詞時退通用收尾(防禦)。
+  - LLM 結構化輸出後備改用 `logger.warning` 記錄降級(可觀測性);`_outcome_note` 防 `anger_history` 過短。
+- 前端強化:
+  - 每幀 `querySelectorAll('.rev')` → **預先快取**(revCache/introInner/footPanels)。
+  - 滾輪 `preventDefault` 改**有條件**(到頭/尾不攔截 → 頁面可往下看 footer)。
+  - 新增**觸控拖曳**(touchstart/move)與**左右方向鍵**選關(a11y/行動裝置)。
+  - `flex-basis` 防 NaN/負值;`trajectorySVG` 加 `Array.isArray` 護欄;`.rev` 加 `backface-visibility`(Safari);`.foot-panel` 寬改 `min(60vw,100%)`。
+  - 「換一關」清掉 `STATE`;Enter 送出加 `busy/ended` 護欄 + `preventDefault`;Esc / 點背景關閉評審報告。
+- 測試:新增 `tests/test_integration.py`(端對端跑完整場、#1 血條歸零不結束、loader 驗證、所有關卡可載入),全套 **25 passed**。
+
 ### 後端分析待辦(2026-06-09 盤點,前端穩定後再做)
 高優先:
 - `graph/nodes.py:50` **anger<=0 自動判 success** 違反設計(該由 LLM `ended` 決定)→ 修掉血條自動結束。

@@ -95,7 +95,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 
 /* 底部米色資訊條:整條由下往上滑入(JS 控 transform,初始藏在下方)*/
 .okeke-foot { position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden; z-index: 2; }
-.foot-panel { position: relative; width: 60vw; background: var(--card2); padding: 22px 30px 30px;
+.foot-panel { position: relative; width: min(60vw, 100%); background: var(--card2); padding: 22px 30px 30px;
   display: flex; flex-direction: column; gap: 12px; align-items: flex-start;
   transform: translateY(100%); will-change: transform; }
 .okeke-tags { display: flex; gap: 10px; }
@@ -104,7 +104,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 /* 階梯式揭露:每格(標籤/單字)用遮罩 + translateY,由下往上「跑」出來(無淡化),JS 依捲動進度錯開。
    注意:transform 對純 inline 元素無效,內層一定要 inline-block。*/
 .rev { display: inline-block; overflow: hidden; vertical-align: bottom; }
-.rev > * { display: inline-block; transform: translateY(120%); will-change: transform; }
+.rev > * { display: inline-block; transform: translateY(120%); will-change: transform; backface-visibility: hidden; }
 .okeke-bigname .rev-char { line-height: 1; }   /* 單字遮罩貼齊,字間不留縫 */
 /* AKARU 式大名(去白底,純文字;不淡化,靠遮罩上滑揭露)*/
 .okeke-bigname { display: inline-block; font-family: var(--f-head); font-weight: 800;

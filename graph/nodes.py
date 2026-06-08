@@ -81,7 +81,9 @@ def route_after_classify(state: GameState) -> str:
 def set_ending(state: GameState) -> dict:
     """收尾:附加 scenario 預寫好的結局台詞(與血條一致,不靠 LLM 即時生成)。"""
     ending_type = state["ending_type"]
-    line = state["scenario"]["ending_lines"][ending_type]
+    ending_lines = state["scenario"].get("ending_lines", {})
+    # 防禦:理論上 loader 已驗證過,但若關卡缺該結局台詞,退一句通用收尾而非 KeyError 崩潰
+    line = ending_lines.get(ending_type) or "(對話結束。)"
     return {
         "ended": True,
         "emotion": _ENDING_EMOTION.get(ending_type, "neutral"),

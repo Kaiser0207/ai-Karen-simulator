@@ -12,9 +12,32 @@ from langchain_core.messages import AIMessage
 _SCENARIO_DIR = Path(__file__).parent
 _PROMPT_DIR = _SCENARIO_DIR.parent / "prompts"
 
+# 奧客 system prompt 骨架快取(整場啟動只讀一次檔)
+_CUSTOMER_TEMPLATE: str | None = None
+
+# scenario JSON 必備欄位(載入時驗證,缺了就明確報錯,而非到遊戲中途才 KeyError)
+_REQUIRED_FIELDS = ("scenario_id", "name", "genre", "persona", "situation",
+                    "triggers", "opening_line", "initial_anger", "max_turns")
+_REQUIRED_ENDINGS = ("fail", "success", "timeout")
+
 
 def _load_template() -> str:
-    return (_PROMPT_DIR / "customer_system.txt").read_text(encoding="utf-8")
+    global _CUSTOMER_TEMPLATE
+    if _CUSTOMER_TEMPLATE is None:
+        _CUSTOMER_TEMPLATE = (_PROMPT_DIR / "customer_system.txt").read_text(encoding="utf-8")
+    return _CUSTOMER_TEMPLATE
+
+
+def _validate_scenario(scenario: dict) -> None:
+    """載入時即驗證關卡必備欄位,避免缺欄位拖到遊戲中途才 KeyError。"""
+    sid = scenario.get("scenario_id", "?")
+    missing = [f for f in _REQUIRED_FIELDS if f not in scenario]
+    if missing:
+        raise ValueError(f"關卡 '{sid}' 缺少必備欄位:{', '.join(missing)}")
+    endings = scenario.get("ending_lines", {})
+    miss_end = [e for e in _REQUIRED_ENDINGS if e not in endings]
+    if miss_end:
+        raise ValueError(f"關卡 '{sid}' 缺少結局台詞 ending_lines:{', '.join(miss_end)}")
 
 
 def _build_system_prompt(scenario: dict) -> str:
@@ -48,6 +71,7 @@ def _read_scenario(scenario_id: str) -> dict:
 def load(scenario_id: str) -> dict:
     """建立開局 state。注意:開場白要放進 messages,否則奧客第一回合會失憶。"""
     scenario = _read_scenario(scenario_id)
+    _validate_scenario(scenario)
     return {
         "scenario_id": scenario["scenario_id"],
         "scenario": scenario,

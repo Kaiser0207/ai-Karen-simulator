@@ -83,6 +83,10 @@ function initHScroll() {
   if (!vp || !track) return;
   const panels = [...track.children];                 // 順序:intro → 各奧客 → 敬請期待
   const N = panels.length; if (!N) return;
+  // 預先快取每個 panel 的子節點,避免每幀 querySelectorAll(逐字 .rev、intro 內層、米色條)
+  const revCache = panels.map((p) => [...p.querySelectorAll(".rev")]);
+  const introInner = panels.map((p) => p.querySelector(".intro-inner"));
+  const footPanels = panels.map((p) => p.querySelector(".foot-panel"));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const smooth = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -104,6 +108,7 @@ function initHScroll() {
   }
 
   const STEP = 1100;                                    // 推進一關所需的滾輪量(px,大=較不靈敏/較慢)
+  const maxAccum = () => Math.max(0, (N - 1) * STEP);
   let accum = 0, targetF = 0, curF = 0, raf = null;
   function frame() {
     curF += (targetF - curF) * 0.12;                    // lerp:小=更滑、慣性更長
@@ -111,19 +116,20 @@ function initHScroll() {
     const VW = vp.clientWidth || 1;
     panels.forEach((p, i) => {
       const frac = fracFor(p, i - curF);
-      p.style.flexBasis = (frac * VW).toFixed(1) + "px";
+      const basis = frac * VW;
+      p.style.flexBasis = (basis > 0 ? basis : 0).toFixed(1) + "px";  // 防 NaN/負值破版
       if (p.classList.contains("panel-intro")) {
         // 標題隨焦點離開「往左推出」(非淡化):整塊內容左移、被外框裁切
-        const inner = p.querySelector(".intro-inner");
+        const inner = introInner[i];
         if (inner) inner.style.transform = `translateX(${(-(TITLE - frac) * VW).toFixed(1)}px)`;
       } else {
         // 接近占主畫面時:米色資訊條由下往上滑入,內含項目再「階梯式」錯開上滑(皆無淡化)
         const a = smooth((frac - 0.40) / (FOCUS - 0.40));   // 0(下一關 40%)→ 1(焦點 60%)
-        const fp = p.querySelector(".foot-panel");
+        const fp = footPanels[i];
         if (fp) fp.style.transform = `translateY(${((1 - smooth(a / 0.35)) * 100).toFixed(1)}%)`;
         // 標籤、標籤、然後大名「一個字一個字」錯開上滑(無淡化);步距依項目數自動縮放,確保聚焦時全到位
         // LEAD 小=更早開始;WIN 小=每字上滑更快;0.45 = 全部字錯開的總跨度(小=更早全顯示)
-        const revs = p.querySelectorAll(".rev"), n = revs.length;
+        const revs = revCache[i], n = revs.length;
         const LEAD = 0.02, WIN = 0.20, step = n > 1 ? 0.45 / (n - 1) : 0;
         revs.forEach((r, k) => {
           const child = r.firstElementChild; if (!child) return;
@@ -135,16 +141,42 @@ function initHScroll() {
     if (bar) bar.style.width = (N > 1 ? (curF / (N - 1)) * 100 : 0).toFixed(2) + "%";
     raf = Math.abs(targetF - curF) > 0.0008 ? requestAnimationFrame(frame) : null;
   }
+  // 推進焦點 deltaPx;回傳「是否真的移動了」——到頭/尾沒動就回 false(讓頁面能繼續捲)
+  function nudge(deltaPx) {
+    const m = maxAccum(); if (m <= 0) return false;
+    const before = accum;
+    accum = clamp(accum + deltaPx, 0, m);
+    if (accum === before) return false;
+    targetF = accum / STEP;
+    if (!raf) raf = requestAnimationFrame(frame);
+    return true;
+  }
   frame();
   if (hsInited) return;
   hsInited = true;
+
   vp.addEventListener("wheel", (e) => {
     const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    accum = clamp(accum + d, 0, (N - 1) * STEP);
-    targetF = accum / STEP;
-    e.preventDefault();
-    if (!raf) raf = requestAnimationFrame(frame);
+    if (nudge(d)) e.preventDefault();        // 只有真的捲動時才攔截;到頭尾放行,頁面可往下看 footer
   }, { passive: false });
+
+  // 觸控板/手機:水平拖曳推進(觸控不會觸發 wheel)
+  let touchX = null;
+  vp.addEventListener("touchstart", (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+  vp.addEventListener("touchmove", (e) => {
+    if (touchX === null) return;
+    const x = e.touches[0].clientX;
+    nudge((touchX - x) * 2.2);               // 往左拖 = 前進;乘數調靈敏度
+    touchX = x;
+  }, { passive: true });
+  vp.addEventListener("touchend", () => { touchX = null; }, { passive: true });
+
+  // 鍵盤可達性:在選關卡頁用左右方向鍵切換關卡
+  window.addEventListener("keydown", (e) => {
+    if ($("#view-select").classList.contains("hidden")) return;
+    if (e.key === "ArrowRight") { nudge(STEP); e.preventDefault(); }
+    else if (e.key === "ArrowLeft") { nudge(-STEP); e.preventDefault(); }
+  });
   window.addEventListener("resize", () => { if (!raf) raf = requestAnimationFrame(frame); });
 }
 
@@ -230,9 +262,11 @@ function showReport(d) {
   $("#report").classList.remove("hidden");
   $("#r-again").onclick = () => { $("#report").classList.add("hidden"); showView("select"); };
   $("#r-close").onclick = () => $("#report").classList.add("hidden");
+  // 點背景空白處也能關閉報告(只在點到 overlay 本身、非卡片內容時)
+  $("#report").onclick = (e) => { if (e.target === $("#report")) $("#report").classList.add("hidden"); };
 }
 function trajectorySVG(hist) {
-  if (!hist || hist.length < 2) return "";
+  if (!Array.isArray(hist) || hist.length < 2) return "";
   const W = 480, H = 90, pad = 10, n = hist.length;
   const x = (i) => pad + (i * (W - 2 * pad)) / (n - 1);
   const y = (v) => pad + (1 - v / 100) * (H - 2 * pad);
@@ -290,8 +324,18 @@ document.querySelectorAll(".navlink").forEach((l) =>
   l.addEventListener("click", () => { const v = l.dataset.view; showView(v); if (v === "history") loadHistory(); }));
 $(".brand").addEventListener("click", () => showView("select"));
 $("#send").addEventListener("click", send);
-$("#msg").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
-$("#quit").addEventListener("click", () => showView("select"));
+$("#msg").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); if (!STATE.busy && !STATE.ended) send(); }
+});
+// 換一關:回選關卡並清掉本場狀態(避免殘留 thread 造成誤送到舊對局)
+$("#quit").addEventListener("click", () => {
+  STATE = { thread: null, maxTurns: 8, busy: false, ended: false };
+  showView("select");
+});
 $("#history-refresh").addEventListener("click", loadHistory);
+// Esc 關閉評審報告覆蓋層
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("#report").classList.add("hidden");
+});
 
 loadScenarios();

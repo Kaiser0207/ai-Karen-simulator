@@ -11,6 +11,7 @@ Phase 1:提供 **mock 實作**,用關鍵字規則模擬 LLM,免 API key 即可�
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 
@@ -18,10 +19,15 @@ import config
 from config import USE_MOCK
 from graph.schemas import CustomerTurn, Emotion, JudgeReport
 
+logger = logging.getLogger(__name__)
+
 _PROMPT_DIR = Path(__file__).parent.parent / "prompts"
 
 # 結構化輸出的解析重試次數(LLM 偶爾回傳不符 schema → 同 prompt 重抽幾次通常就好)
 _STRUCT_ATTEMPTS = 3
+
+# 評審 system prompt 快取(整場啟動只讀一次檔)
+_JUDGE_TEMPLATE: str | None = None
 
 # --- mock 用的關鍵字規則 ---
 APOLOGY = ["抱歉", "對不起", "不好意思", "理解", "明白", "辛苦您", "您的心情"]
@@ -211,7 +217,7 @@ def _outcome_note(ending_type, anger_history, max_turns) -> str:
             f"顧客憤怒值軌跡(0=完全消氣,100=爆表):{traj};"
             f"起始 {anger_history[0]},最終 {anger_history[-1]}。"
         )
-        if max_turns:
+        if max_turns and len(anger_history) > 1:
             parts.append(f"共進行 {len(anger_history) - 1}/{max_turns} 回合。")
     parts.append("請依此結果校準分數,報告內容不得與結果矛盾。")
     return " ".join(parts)
@@ -241,7 +247,10 @@ def _get_chat(model: str, temperature: float):
 
 
 def _judge_system_prompt() -> str:
-    return (_PROMPT_DIR / "judge_system.txt").read_text(encoding="utf-8")
+    global _JUDGE_TEMPLATE
+    if _JUDGE_TEMPLATE is None:
+        _JUDGE_TEMPLATE = (_PROMPT_DIR / "judge_system.txt").read_text(encoding="utf-8")
+    return _JUDGE_TEMPLATE
 
 
 def _invoke_structured(model, msgs):
@@ -274,8 +283,9 @@ def _real_customer_turn(system_prompt, anger, messages, player_input) -> Custome
     msgs = [SystemMessage(content=system_prompt), anger_note, *messages, HumanMessage(content=player_input)]
     try:
         return _invoke_structured(llm, msgs)
-    except Exception:  # noqa: BLE001
+    except Exception as err:  # noqa: BLE001
         # 後備:重試仍失敗時不讓玩家卡死,回一句中性台詞、不動憤怒值,遊戲可繼續
+        logger.warning("奧客大腦結構化輸出重試後仍失敗,改用中性後備台詞:%s", err)
         return CustomerTurn(
             reply="(顧客沉默地盯著你,等你說點有用的。)",
             anger_change=0, ended=False, emotion=_emotion_for(anger),
@@ -292,6 +302,7 @@ def _real_judge_report(messages, outcome_note: str = "", ending_type: str | None
     msgs.extend(messages)
     try:
         return _invoke_structured(llm, msgs)
-    except Exception:  # noqa: BLE001
+    except Exception as err:  # noqa: BLE001
         # 後備:退回關鍵字規則評分(mock 評審),確保結束時一定有報告,不會整場無結算
+        logger.warning("評審結構化輸出重試後仍失敗,改用關鍵字規則(mock)報告:%s", err)
         return _mock_judge_report(messages, ending_type)

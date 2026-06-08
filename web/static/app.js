@@ -6,7 +6,7 @@ const el = (h) => { const t = document.createElement("template"); t.innerHTML = 
 
 const GENRE_STYLE = {
   "餐飲": { grad: "#b692a1", emoji: "🍜" },   // AKARU 藕粉
-  "零售": { grad: "#bfccd8", emoji: "🛍️" },   // AKARU 灰藍
+  "零售": { grad: "#b3c2ce", emoji: "🛍️" },   // 灰藍(由 #bfccd8 微調深;接近原色)
 };
 const styleFor = (g) => GENRE_STYLE[g] || { grad: "#798e7b", emoji: "😤" };  // AKARU 灰綠
 const angerColor = (a) => (a >= 70 ? "#FE494A" : a >= 40 ? "#f39c12" : "#2e9e6b");

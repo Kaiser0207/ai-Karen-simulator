@@ -209,8 +209,8 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   box-shadow: var(--shadow-sm); cursor: pointer; transition: transform .35s, box-shadow .35s; display: flex; flex-direction: column; }
 .gcard:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
 .gcard-banner { height: 130px; position: relative; display: flex; align-items: flex-end; padding: 16px; }
-.gcard-banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78), transparent 70%); }
-.gcard-name { position: relative; z-index: 1; font-family: var(--f-head); font-weight: 800; font-size: 1.3rem; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.5); }
+/* 去除底部黑色漸層,改純色塊;標題改深色(AKARU 做法),在淺藍/淺粉上仍清楚 */
+.gcard-name { position: relative; z-index: 1; font-family: var(--f-head); font-weight: 800; font-size: 1.3rem; color: var(--ink); }
 .gcard-emoji { position: absolute; top: 14px; right: 16px; font-size: 2rem; }
 .pill-genre { position: absolute; top: 14px; left: 16px; z-index: 1; font-family: var(--f-mono); font-size: 10px;
   font-weight: 700; letter-spacing: .1em; background: rgba(26,26,26,.72); color: #F0EAD6; padding: 4px 10px; border-radius: 999px; }

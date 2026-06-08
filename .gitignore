@@ -1,0 +1,11 @@
+# 環境變數 / 機密(絕對不要 commit)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# 執行期產物
+*.db
+logs/

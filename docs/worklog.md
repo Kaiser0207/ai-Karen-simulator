@@ -74,6 +74,23 @@
 - 修 bug:`transform` 對純 inline 元素無效 → `.rev > *` 補 `display:inline-block`(先前「標籤」其實沒被藏/動)。
 - 揭露步距改**依項目數自動縮放**(`step = 0.62/(n-1)`,LEAD 0.08、WIN 0.30),名字 8–9 字也能在聚焦時全到位。
 
-### 待辦
+### 2026-06-09 字體換 Versalitas + 大名上滑更快
+- 標題英文字體從 Justus-Bold 換成 **Justus-Versalitas**(小型大寫 small-caps;無下緣 descender → 上下不再相撞)。
+  `@font-face` 指向 `/fonts/Justus-Versalitas.ttf`;`.akaru-mark` 行距收回 0.94、字距 .01em。授權:公有領域(Walbaum 逝世逾百年)。
+- 大名逐字上滑「更快、更早顯示」:`LEAD 0.08→0.02`(更早起)、`WIN 0.30→0.20`(每字更快)、總跨度 `0.62→0.45`(更早全現)。
+
+### 後端分析待辦(2026-06-09 盤點,前端穩定後再做)
+高優先:
+- `graph/nodes.py:50` **anger<=0 自動判 success** 違反設計(該由 LLM `ended` 決定)→ 修掉血條自動結束。
+- 結局判定優先級(fail/success/timeout)無文件、邊界(turn==max 且 ended=true)易誤判 → 補規則 + 測試。
+- `web/server.py` **SESSIONS 記憶體 dict**:重啟即失、無 TTL、無鎖 → 持久化或加逾期清理。
+- SQLite `check_same_thread=False` 無鎖 → 加 timeout / 鎖,避免並發不一致。
+- `services/llm.py` 結構化輸出**無重試/fallback**(Groq 路徑未驗證)→ 解析失敗要退避重試。
+中優先:
+- **無單元測試** → 補 anger 邊界、結局判定、mock 評分。
+- prompt 樣板每次讀檔 → 啟動快取;`str.replace` 填充易誤replace → 改 Jinja2/Template。
+- 加結構化 logging + 錯誤碼;config 啟動驗證 env。
+低優先:Phase 5 TTS(scenario 已留 `tts_voice` 欄位)、async 化、依賴注入便於測試。
+
+### 待辦(前端)
 - 依實際畫面微調手感(STEP 1100、lerp 0.12、LEAD/WIN/step、焦點寬 0.60/下一關 0.40)、行動裝置觸控。
-- Phase 5 TTS(主線,仍未動)。

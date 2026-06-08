@@ -118,8 +118,9 @@ function initHScroll() {
         const fp = p.querySelector(".foot-panel");
         if (fp) fp.style.transform = `translateY(${((1 - smooth(a / 0.35)) * 100).toFixed(1)}%)`;
         // 標籤、標籤、然後大名「一個字一個字」錯開上滑(無淡化);步距依項目數自動縮放,確保聚焦時全到位
+        // LEAD 小=更早開始;WIN 小=每字上滑更快;0.45 = 全部字錯開的總跨度(小=更早全顯示)
         const revs = p.querySelectorAll(".rev"), n = revs.length;
-        const LEAD = 0.08, WIN = 0.30, step = n > 1 ? 0.62 / (n - 1) : 0;
+        const LEAD = 0.02, WIN = 0.20, step = n > 1 ? 0.45 / (n - 1) : 0;
         revs.forEach((r, k) => {
           const child = r.firstElementChild; if (!child) return;
           const pk = smooth((a - LEAD - k * step) / WIN);

@@ -79,7 +79,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 @keyframes nudge { 0%,100% { transform: translateX(0); } 50% { transform: translateX(9px); } }
 
 /* 奧客 panel:整塊色塊視覺(圖示置中於 panel)+ 底部米色資訊條(滾動時由下往上滑入)*/
-.panel-okeke { position: relative; overflow: hidden; border-left: 1px solid var(--border); cursor: pointer; }
+.panel-okeke { position: relative; overflow: hidden; border-left: 1px solid var(--border); }
 .okeke-visual { position: absolute; inset: 0; overflow: hidden; }
 .okeke-visual::after { content: ""; position: absolute; inset: 0;
   background: linear-gradient(125deg, rgba(255,255,255,.06), rgba(14,14,14,.10)); }
@@ -114,7 +114,8 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   background: var(--ink); color: #F0EAD6; border: none; cursor: pointer; line-height: 1.15;
   font-family: var(--f-head); font-weight: 700; font-size: .85rem; box-shadow: var(--shadow);
   transition: transform .25s, background .25s; }
-.okeke-start:hover { transform: scale(1.08); background: var(--red); }
+/* hover 用該關卡的顏色(零售=藍、餐飲=藕粉…),色塊偏淺 → 字改深色才清楚 */
+.okeke-start:hover { transform: scale(1.08); background: var(--accent, var(--red)); color: var(--ink); }
 
 /* 結尾「敬請期待」panel(同樣外框裁切、內層固定寬)*/
 .panel-soon { border-left: 1px solid var(--border);

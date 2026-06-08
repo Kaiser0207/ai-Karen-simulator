@@ -95,6 +95,11 @@
   apply_state 夾限/遞增/軌跡 7 例、mock 奧客+評審 7 例,共 **21 passed**。`uv add --dev pytest`。
 - API 端對端手測:三結局(success via ended / fail 爆表 / 續行)、anger/emotion_history 長度皆正確。
 
+### 2026-06-09 選關卡互動修正
+- 「開始挑戰」鈕 hover 顏色改吃**該關卡顏色**(`--accent`=genre 色;零售藍/餐飲藕粉),字改深色 `--ink` 才清楚。
+- **只准點「開始挑戰」鈕進關**:click 從整個 panel 移到鈕上(移除 `.panel-okeke` 的 cursor:pointer),
+  修掉「點面板任何地方/滾動誤觸都會進關」的 bug。
+
 ### 後端分析待辦(2026-06-09 盤點,前端穩定後再做)
 高優先:
 - `graph/nodes.py:50` **anger<=0 自動判 success** 違反設計(該由 LLM `ended` 決定)→ 修掉血條自動結束。

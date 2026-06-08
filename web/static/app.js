@@ -62,11 +62,15 @@ function okekePanel(s, i) {
             <span class="rev"><span class="tag">${s.max_turns} 回合</span></span>
           </div>
           <h2 class="okeke-bigname">${nameChars}</h2>
-          <button class="okeke-start" type="button">開始<br/>挑戰</button>
+          <button class="okeke-start" type="button" style="--accent:${st.grad}">開始<br/>挑戰</button>
         </div>
       </div>
     </div>`);
-  p.addEventListener("click", () => startGame(s.scenario_id));
+  // 只有「開始挑戰」鈕能進關卡(避免點到面板任何地方、或滾動誤觸而誤入)
+  p.querySelector(".okeke-start").addEventListener("click", (e) => {
+    e.stopPropagation();
+    startGame(s.scenario_id);
+  });
   return p;
 }
 

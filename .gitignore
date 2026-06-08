@@ -8,4 +8,6 @@ __pycache__/
 
 # 執行期產物
 *.db
+*.db-shm
+*.db-wal
 logs/

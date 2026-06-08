@@ -18,7 +18,8 @@
 ## 啟動
 
 ```bash
-uv run python app.py        # 開網頁(預設 http://127.0.0.1:7860)
+uv run python app.py        # Gradio 網頁(預設 http://127.0.0.1:7860)
+uv run python -m web.server # 自訂網頁前端(CineRooms 風格,http://127.0.0.1:8000)
 uv run python run_demo.py   # 純文字驗證:mock 跑三種結局
 uv run python smoke_test.py # 真實 Gemini 跑一回合
 uv run python show_prompt.py# 看實際送給 LLM 的 prompt(不呼叫 API)

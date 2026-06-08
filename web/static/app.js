@@ -45,6 +45,9 @@ async function loadScenarios() {
 function okekePanel(s, i) {
   const st = styleFor(s.genre);
   const num = String(i + 1).padStart(2, "0");
+  // 大名拆成單字,每字各自一個 .rev 遮罩 → 一個字一個字錯開上滑
+  const nameChars = Array.from(s.name || "")
+    .map((ch) => `<span class="rev rev-char"><span>${ch === " " ? "&nbsp;" : escapeHtml(ch)}</span></span>`).join("");
   const p = el(`
     <div class="panel panel-okeke">
       <div class="okeke-visual" style="background:${st.grad}">
@@ -58,7 +61,7 @@ function okekePanel(s, i) {
             <span class="rev"><span class="tag">初始憤怒 ${s.initial_anger}</span></span>
             <span class="rev"><span class="tag">${s.max_turns} 回合</span></span>
           </div>
-          <span class="rev rev-block"><h2 class="okeke-bigname">${s.name}</h2></span>
+          <h2 class="okeke-bigname">${nameChars}</h2>
           <button class="okeke-start" type="button">開始<br/>挑戰</button>
         </div>
       </div>
@@ -113,10 +116,13 @@ function initHScroll() {
         // 接近占主畫面時:米色資訊條由下往上滑入,內含項目再「階梯式」錯開上滑(皆無淡化)
         const a = smooth((frac - 0.40) / (FOCUS - 0.40));   // 0(下一關 40%)→ 1(焦點 60%)
         const fp = p.querySelector(".foot-panel");
-        if (fp) fp.style.transform = `translateY(${((1 - smooth(a / 0.40)) * 100).toFixed(1)}%)`;
-        p.querySelectorAll(".rev").forEach((r, k) => {  // 順序:標籤、標籤、大名
+        if (fp) fp.style.transform = `translateY(${((1 - smooth(a / 0.35)) * 100).toFixed(1)}%)`;
+        // 標籤、標籤、然後大名「一個字一個字」錯開上滑(無淡化);步距依項目數自動縮放,確保聚焦時全到位
+        const revs = p.querySelectorAll(".rev"), n = revs.length;
+        const LEAD = 0.08, WIN = 0.30, step = n > 1 ? 0.62 / (n - 1) : 0;
+        revs.forEach((r, k) => {
           const child = r.firstElementChild; if (!child) return;
-          const pk = smooth((a - 0.20 - k * 0.16) / 0.40); // 門檻錯開、窗口拉寬 → 一格一格像階梯,看得到上滑
+          const pk = smooth((a - LEAD - k * step) / WIN);
           child.style.transform = `translateY(${((1 - pk) * 120).toFixed(1)}%)`;
         });
       }

@@ -74,26 +74,29 @@ function initHScroll() {
 
   // 手風琴:標題占左 ~55%;右側關卡依「離焦點距離」縮放,當前關卡放大、大名隨寬度淡入。
   // 不平移 track,靠 flex 依寬度重排(標題會縮成左側細條,符合 AKARU)。
-  const STEP = 420;            // 每滾一個關卡需要的滾動量(px)
-  const TMAX = 56, TMIN = 4;   // 標題寬 vw:滿版 → 幾乎清空(內容靠左、超出裁切 → 往右離開感)
-  const WMAX = 54, WMIN = 15, SOON = 14;
+  const STEP = 520;            // 每滾一個關卡需要的滾動量(px,大一點=過場更緩)
+  const TMAX = 56, TMIN = 3;   // 標題寬 vw:滿版 → 幾乎清空,讓出舞台給奧客
+  const WMAX = 82, WMIN = 13, SOON = 12;  // 當前關卡放大到近滿版,旁邊漸小
   let target = 0, current = 0, raf = null;
   const maxScroll = () => STEP * items.length;
 
+  const R = 1.7;  // 縮放影響半徑(步):大 = 過場更緩、更連續
+  const smooth = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }; // smoothstep,兩端導數=0,無折角
   function layout(p) {         // p:0=標題滿版, 1=第1關 active, 2=第2關 active…
-    intro.style.width = (TMIN + (TMAX - TMIN) * Math.max(0, 1 - p)) + "vw";
-    if (introInner) {  // 標題內容往右平移 + 淡出 → 被 panel 裁切,做出「往右離開」
-      introInner.style.transform = `translateX(${Math.min(1, p) * 36}vw)`;
-      introInner.style.opacity = `${Math.max(0, 1 - p * 0.85)}`;
+    // 標題:平滑縮窄 + 往左平移淡出 → 往左離場
+    const tp = smooth(Math.min(1, p));
+    intro.style.width = (TMAX - (TMAX - TMIN) * tp) + "vw";
+    if (introInner) {
+      introInner.style.transform = `translateX(${tp * -46}vw)`;
+      introInner.style.opacity = `${1 - tp}`;
     }
     items.forEach((el, j) => {
       const d = Math.abs(p - 1 - j);
-      const f = Math.max(0, 1 - d / 1.3);                 // 1=正中(最大),0=遠(最小)
+      const f = 1 - smooth(d / R);                        // 平滑鐘形:正中=1,邊界平滑歸 0(無突跳)
       el.style.width = (WMIN + (WMAX - WMIN) * f) + "vw";
       const name = el.querySelector(".okeke-bigname");
-      const rev = Math.max(0, Math.min(1, (f - 0.55) / 0.45));  // 夠大才浮現大名
+      const rev = smooth((f - 0.45) / 0.4);               // 夠大才漸漸浮現大名
       if (name) { name.style.opacity = rev; name.style.transform = `translateY(${(1 - rev) * 14}px)`; }
-      el.classList.toggle("is-active", f > 0.6);
     });
     if (soon) soon.style.width = SOON + "vw";
     if (bar) { const m = maxScroll(); bar.style.width = (m ? (current / m) * 100 : 0) + "%"; }
@@ -110,7 +113,7 @@ function initHScroll() {
   vp.addEventListener("wheel", (e) => {
     const m = maxScroll(); if (m <= 0) return;
     const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    target = Math.max(0, Math.min(m, target + d * 0.9));
+    target = Math.max(0, Math.min(m, target + d * 0.7));
     e.preventDefault();
     if (!raf) raf = requestAnimationFrame(tick);
   }, { passive: false });

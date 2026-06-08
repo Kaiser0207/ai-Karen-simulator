@@ -79,6 +79,20 @@
   `@font-face` 指向 `/fonts/Justus-Versalitas.ttf`;`.akaru-mark` 行距收回 0.94、字距 .01em。授權:公有領域(Walbaum 逝世逾百年)。
 - 大名逐字上滑「更快、更早顯示」:`LEAD 0.08→0.02`(更早起)、`WIN 0.30→0.20`(每字更快)、總跨度 `0.62→0.45`(更早全現)。
 
+### 2026-06-09 後端高優先修正(branch `feat/backend-fixes`)
+- 標題英文字體再換 **Justus-Italic**(Walbaum Didone 斜體);`.akaru-mark` 行距回 1.04(斜體有 descender)、字距 0。
+- **#1 血條自動結束 bug**:`classify_ending` 移除 `anger<=0 → success`,和解只由 LLM `CustomerTurn.ended` 判。
+  (驗證:怒值壓到 0 但 ended=False 時遊戲續行,不再被血條搶判成功。)
+- **#2 結局優先級**:在 `classify_ending` docstring 明文化 **fail > success(ended) > timeout**;
+  最後一回合談成(ended)優先於超時。
+- **#3 SESSIONS 持久化/TTL/鎖**:改存 `{first, scenario, last, (init)}`;加 `_SESS_LOCK`;閒置 >1h GC;
+  記憶體沒有時 `_get_session` 從 **checkpointer 還原**(伺服器重啟、進行中對局可續玩)。
+  軌跡(anger/emotion_history)改以 graph state 為準;新增 `emotion_history` 進 `GameState`(reducer 累加、checkpointer 持久化)。
+- **#4 SQLite 並發**:連線加 `timeout=30` + `PRAGMA journal_mode=WAL`;用 `_DB_LOCK` 把 graph 讀寫序列化(避免單連線多執行緒同 cursor)。
+- **#5 結構化輸出無 fallback**:`services/llm._invoke_structured` 解析失敗退避重試 3 次;
+  奧客全失敗 → 回中性台詞不卡關;評審全失敗 → 退回 mock 關鍵字報告(結束一定有結算)。
+- 待辦:補單元測試(怒值邊界、結局優先級、mock 評分)。
+
 ### 後端分析待辦(2026-06-09 盤點,前端穩定後再做)
 高優先:
 - `graph/nodes.py:50` **anger<=0 自動判 success** 違反設計(該由 LLM `ended` 決定)→ 修掉血條自動結束。

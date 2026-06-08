@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -26,12 +27,65 @@ import storage
 from graph.build import build_graph
 from scenarios import loader
 
-# 建一次圖。多執行緒下 SQLite 連線需 check_same_thread=False。
-_conn = sqlite3.connect("game_state.db", check_same_thread=False)
+# 建一次圖。多執行緒下 SQLite 連線需 check_same_thread=False;
+# 加 timeout(被鎖時最多等 30s 而非立刻拋 "database is locked")+ WAL(讀寫併發較友善)。
+_conn = sqlite3.connect("game_state.db", check_same_thread=False, timeout=30)
+_conn.execute("PRAGMA journal_mode=WAL")
 GRAPH = build_graph(SqliteSaver(_conn))
 
-# thread_id -> 本場附加資訊(graph state 由 checkpointer 存;這裡只記前端要的東西)
+# 單一 SQLite 連線在多執行緒下「同時使用同一 cursor」並不安全 → 用鎖把 graph 的讀寫序列化。
+# 這是訓練用工具(併發極低),序列化最簡單且安全;日後要真併發再換 Postgres / 連線池。
+_DB_LOCK = threading.Lock()
+
+
+def _graph_invoke(payload, cfg):
+    with _DB_LOCK:
+        return GRAPH.invoke(payload, cfg)
+
+
+def _graph_get_state(cfg):
+    with _DB_LOCK:
+        return GRAPH.get_state(cfg)
+
+
+# thread_id -> 本場附加資訊(graph state 由 checkpointer 存;這裡只記「是否首回合」「關卡」「最後活動時間」)。
+# 伺服器重啟會清空,但進行中的對局可從 checkpointer 還原(見 _get_session)。
 SESSIONS: dict[str, dict] = {}
+_SESS_LOCK = threading.Lock()
+_SESSION_TTL = 3600  # 閒置逾時(秒);超過就清掉記憶體 session(之後仍可從 checkpointer 還原)
+
+
+def _gc_sessions(now: float) -> None:
+    """清掉閒置過久的記憶體 session,避免玩家中離後永久佔用記憶體。"""
+    stale = [sid for sid, s in SESSIONS.items() if now - s.get("last", now) > _SESSION_TTL]
+    for sid in stale:
+        SESSIONS.pop(sid, None)
+
+
+def _get_session(thread_id: str) -> dict | None:
+    """取 session;記憶體沒有時(伺服器重啟 / TTL 清掉)試著從 checkpointer 還原。
+
+    進行中的 graph state 由 SqliteSaver 以 thread_id 持久化,所以即使 SESSIONS 不在,
+    只要該 thread 已跑過至少一回合,就能還原關卡並以 first=False 繼續對局。
+    """
+    now = time.time()
+    with _SESS_LOCK:
+        _gc_sessions(now)
+        sess = SESSIONS.get(thread_id)
+        if sess:
+            return sess
+    # 記憶體沒有 → 查 checkpointer(在 SESS_LOCK 外做,避免長時間持鎖)
+    try:
+        snap = _graph_get_state({"configurable": {"thread_id": thread_id}})
+    except Exception:  # noqa: BLE001
+        snap = None
+    vals = getattr(snap, "values", None) if snap else None
+    if not vals or not vals.get("scenario"):
+        return None  # 從沒開始過 → 真的不存在
+    recovered = {"first": False, "scenario": vals["scenario"], "last": now}
+    with _SESS_LOCK:
+        SESSIONS[thread_id] = recovered
+    return recovered
 
 ENDING_LABEL = {
     "fail": "失敗 · 砸店/投訴",
@@ -60,7 +114,7 @@ def _invoke_with_retry(payload, cfg, retries: int = 1):
     """遇暫時性錯誤(如 429)退避重試一次,其餘立即拋出。"""
     for attempt in range(retries + 1):
         try:
-            return GRAPH.invoke(payload, cfg)
+            return _graph_invoke(payload, cfg)
         except Exception as err:  # noqa: BLE001
             if attempt < retries and _is_transient(err):
                 time.sleep(2)
@@ -108,10 +162,10 @@ def api_start(req: StartReq):
     except FileNotFoundError:
         raise HTTPException(404, "找不到這個關卡")
     sid = uuid.uuid4().hex
-    SESSIONS[sid] = {
-        "init": init, "first": True, "scenario": init["scenario"],
-        "anger_history": [init["anger"]], "emotion_history": [],
-    }
+    now = time.time()
+    with _SESS_LOCK:
+        _gc_sessions(now)
+        SESSIONS[sid] = {"init": init, "first": True, "scenario": init["scenario"], "last": now}
     sc = init["scenario"]
     return {
         "thread_id": sid,
@@ -126,23 +180,26 @@ def api_start(req: StartReq):
 @app.post("/api/say")
 def api_say(req: SayReq):
     """玩家說一句 → 跑一個回合 → 回傳奧客回應與最新狀態(結束時附結局台詞與評審報告)。"""
-    sess = SESSIONS.get(req.thread_id)
-    if not sess:
-        raise HTTPException(404, "工作階段不存在或已結束,請重新開始一場。")
     text = (req.text or "").strip()
     if not text:
         raise HTTPException(400, "請先輸入你的回應。")
+    sess = _get_session(req.thread_id)
+    if not sess:
+        raise HTTPException(404, "工作階段不存在或已結束,請重新開始一場。")
 
     payload = {**sess["init"], "player_input": text} if sess["first"] else {"player_input": text}
     try:
         result = _invoke_with_retry(payload, {"configurable": {"thread_id": req.thread_id}})
     except Exception as err:  # noqa: BLE001
         raise HTTPException(503, _friendly_error(err))
-    sess["first"] = False
+    with _SESS_LOCK:
+        if req.thread_id in SESSIONS:
+            SESSIONS[req.thread_id].update(first=False, last=time.time())
 
     anger = result["anger"]
-    sess["anger_history"].append(anger)
-    sess["emotion_history"].append(result.get("emotion", "neutral"))
+    # 軌跡以 graph state(checkpointer 持久化)為準,不再靠記憶體 session 累加
+    anger_history = list(result.get("anger_history") or [anger])
+    emotion_history = list(result.get("emotion_history") or [])
 
     resp = {
         "ai_reply": result["ai_reply"],
@@ -159,8 +216,8 @@ def api_say(req: SayReq):
         resp["ending_line"] = result["messages"][-1].content
         resp["ending_label"] = ENDING_LABEL.get(result["ending_type"], result["ending_type"])
         resp["report"] = result["report"]
-        resp["anger_history"] = sess["anger_history"]
-        resp["emotion_history"] = sess["emotion_history"]
+        resp["anger_history"] = anger_history
+        resp["emotion_history"] = emotion_history
         # 從 graph messages 重建逐句對話,存進歷史紀錄
         transcript = [
             {"role": "assistant" if type(m).__name__ == "AIMessage" else "user",
@@ -169,10 +226,11 @@ def api_say(req: SayReq):
         ]
         storage.save_game(
             thread_id=req.thread_id, scenario=sess["scenario"], ending_type=result["ending_type"],
-            anger_history=sess["anger_history"], emotion_history=sess["emotion_history"],
+            anger_history=anger_history, emotion_history=emotion_history,
             transcript=transcript, report=result["report"],
         )
-        SESSIONS.pop(req.thread_id, None)
+        with _SESS_LOCK:
+            SESSIONS.pop(req.thread_id, None)
     return resp
 
 

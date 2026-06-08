@@ -22,6 +22,7 @@ class GameState(TypedDict):
     turn: int  # 已進行回合數
     messages: Annotated[list, add_messages]  # 對話歷史(add_messages reducer 會自動追加)
     anger_history: Annotated[list, operator.add]  # 每回合結束後的憤怒值(含開局),供評審看軌跡
+    emotion_history: Annotated[list, operator.add]  # 每回合奧客情緒(長度=回合數),由 checkpointer 持久化
 
     # --- 本回合 I/O ---
     player_input: str  # 本回合玩家文字(STT 後 / 直接打字)

@@ -55,6 +55,7 @@ def load(scenario_id: str) -> dict:
         "max_turns": scenario["max_turns"],
         "anger": scenario["initial_anger"],
         "anger_history": [scenario["initial_anger"]],  # 開局值,後續每回合 apply_state 會追加
+        "emotion_history": [],  # 每回合 apply_state 追加(長度=回合數);開局不計
         "turn": 0,
         "messages": [AIMessage(scenario["opening_line"])],
         "player_input": "",

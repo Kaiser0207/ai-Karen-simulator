@@ -105,10 +105,10 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .rev { display: inline-block; overflow: hidden; vertical-align: bottom; }
 .rev-block { display: block; }
 .rev > * { transform: translateY(118%); will-change: transform; }
-/* AKARU 式白盒大名(不淡化,靠遮罩上滑揭露)*/
+/* AKARU 式大名(去白底,純文字;不淡化,靠遮罩上滑揭露)*/
 .okeke-bigname { display: inline-block; font-family: var(--f-head); font-weight: 800;
-  font-size: clamp(1.8rem, 3.6vw, 3rem); line-height: 1.06; margin: 2px 0 0; color: var(--ink);
-  background: #fff; padding: 6px 14px; max-width: 92%; }
+  font-size: clamp(1.9rem, 3.8vw, 3.1rem); line-height: 1.08; margin: 2px 0 0; color: var(--ink);
+  padding: 2px 0; max-width: 100%; }
 .okeke-start { position: absolute; right: 30px; bottom: 28px; width: 86px; height: 86px; border-radius: 50%;
   background: var(--ink); color: #F0EAD6; border: none; cursor: pointer; line-height: 1.15;
   font-family: var(--f-head); font-weight: 700; font-size: .85rem; box-shadow: var(--shadow);
@@ -121,7 +121,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .soon-inner { width: 40vw; height: 100%; display: flex; align-items: center; justify-content: center; }
 .panel-soon span { font-family: var(--f-head); font-weight: 700; color: var(--muted); text-align: center; }
 
-.scroll-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--border); }
+.scroll-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--border); z-index: 20; }
 .scroll-progress span { display: block; height: 100%; width: 0; background: var(--red); }
 
 /* ── 共用按鈕 ── */

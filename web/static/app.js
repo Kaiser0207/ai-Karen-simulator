@@ -111,13 +111,13 @@ function initHScroll() {
         if (inner) inner.style.transform = `translateX(${(-(TITLE - frac) * VW).toFixed(1)}px)`;
       } else {
         // 接近占主畫面時:米色資訊條由下往上滑入,內含項目再「階梯式」錯開上滑(皆無淡化)
-        const a = smooth((frac - 0.42) / (FOCUS - 0.42));   // 0(下一關 42%)→ 1(焦點 60%)
+        const a = smooth((frac - 0.40) / (FOCUS - 0.40));   // 0(下一關 40%)→ 1(焦點 60%)
         const fp = p.querySelector(".foot-panel");
-        if (fp) fp.style.transform = `translateY(${((1 - smooth(a / 0.45)) * 100).toFixed(1)}%)`;
-        p.querySelectorAll(".rev").forEach((r, k) => {
+        if (fp) fp.style.transform = `translateY(${((1 - smooth(a / 0.40)) * 100).toFixed(1)}%)`;
+        p.querySelectorAll(".rev").forEach((r, k) => {  // 順序:標籤、標籤、大名
           const child = r.firstElementChild; if (!child) return;
-          const pk = smooth((a - 0.30 - k * 0.16) / 0.30); // 每格門檻錯開 → 一格一格像階梯
-          child.style.transform = `translateY(${((1 - pk) * 118).toFixed(1)}%)`;
+          const pk = smooth((a - 0.20 - k * 0.16) / 0.40); // 門檻錯開、窗口拉寬 → 一格一格像階梯,看得到上滑
+          child.style.transform = `translateY(${((1 - pk) * 120).toFixed(1)}%)`;
         });
       }
     });

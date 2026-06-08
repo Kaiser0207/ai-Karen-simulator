@@ -287,7 +287,7 @@ async function loadHistory() {
     list.forEach((g) => {
       const st = styleFor((g.scenario_name || "").includes("劉董") ? "零售" : "餐飲");
       const card = el(`
-        <div class="gcard">
+        <div class="gcard" style="--accent:${st.grad}">
           <div class="gcard-banner" style="background:${st.grad}">
             <span class="pill-genre">${g.ending_label || g.ending_type}</span>
             <span class="gcard-emoji">${st.emoji}</span>

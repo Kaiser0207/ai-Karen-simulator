@@ -62,61 +62,43 @@ function okekePanel(s, i) {
   return p;
 }
 
-// 平滑橫向滾動:滾輪 deltaY 累積成 target,每幀 lerp 靠近 → translateX
+// 水平捲動:滾輪 deltaY → 整條 track 往左平移(純 GPU transform,順);
+// 標題被推出左邊、下一關占主畫面、再下一關露邊;大名依「捲到的位置」淡入。
 let hsInited = false;
 function initHScroll() {
   const vp = $("#akaru-viewport"), track = $("#h-track"), bar = $("#scroll-bar");
-  const intro = track && track.querySelector(".panel-intro");
-  const introInner = intro && intro.querySelector(".intro-inner");
   const items = track ? [...track.querySelectorAll(".panel-okeke")] : [];
-  const soon = track && track.querySelector(".panel-soon");
-  if (!vp || !track || !intro) return;
-
-  // 手風琴:標題占左 ~55%;右側關卡依「離焦點距離」縮放,當前關卡放大、大名隨寬度淡入。
-  // 不平移 track,靠 flex 依寬度重排(標題會縮成左側細條,符合 AKARU)。
-  const STEP = 520;            // 每滾一個關卡需要的滾動量(px,大一點=過場更緩)
-  const TMAX = 56, TMIN = 3;   // 標題寬 vw:滿版 → 幾乎清空,讓出舞台給奧客
-  const WMAX = 82, WMIN = 13, SOON = 12;  // 當前關卡放大到近滿版,旁邊漸小
+  if (!vp || !track) return;
+  const smooth = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
   let target = 0, current = 0, raf = null;
-  const maxScroll = () => STEP * items.length;
-
-  const R = 1.7;  // 縮放影響半徑(步):大 = 過場更緩、更連續
-  const smooth = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }; // smoothstep,兩端導數=0,無折角
-  function layout(p) {         // p:0=標題滿版, 1=第1關 active, 2=第2關 active…
-    // 標題:平滑縮窄 + 往左平移淡出 → 往左離場
-    const tp = smooth(Math.min(1, p));
-    intro.style.width = (TMAX - (TMAX - TMIN) * tp) + "vw";
-    if (introInner) {
-      introInner.style.transform = `translateX(${tp * -46}vw)`;
-      introInner.style.opacity = `${1 - tp}`;
-    }
-    items.forEach((el, j) => {
-      const d = Math.abs(p - 1 - j);
-      const f = 1 - smooth(d / R);                        // 平滑鐘形:正中=1,邊界平滑歸 0(無突跳)
-      el.style.width = (WMIN + (WMAX - WMIN) * f) + "vw";
-      const name = el.querySelector(".okeke-bigname");
-      const rev = smooth((f - 0.45) / 0.4);               // 夠大才漸漸浮現大名
-      if (name) { name.style.opacity = rev; name.style.transform = `translateY(${(1 - rev) * 14}px)`; }
-    });
-    if (soon) soon.style.width = SOON + "vw";
-    if (bar) { const m = maxScroll(); bar.style.width = (m ? (current / m) * 100 : 0) + "%"; }
-  }
-  function tick() {
-    current += (target - current) * 0.075;   // 更小 = 更滑順、更多滑行慣性
+  const maxScroll = () => Math.max(0, track.scrollWidth - vp.clientWidth);
+  function frame() {
+    current += (target - current) * 0.09;          // lerp:小=更滑、慣性更長
     if (Math.abs(target - current) < 0.4) current = target;
-    layout(current / STEP);
-    raf = current !== target ? requestAnimationFrame(tick) : null;
+    track.style.transform = `translate3d(${-current}px,0,0)`;
+    const vw = vp.clientWidth || 1;
+    items.forEach((el) => {
+      const name = el.querySelector(".okeke-bigname");
+      if (!name) return;
+      const t = (el.offsetLeft - current) / vw;     // 該 panel 左緣相對視窗(0=貼齊左 = 占主畫面)
+      const rev = smooth(1 - Math.min(1, Math.abs(t - 0.06) / 0.46)); // 占住主畫面時才明顯,露邊/離場則隱
+      name.style.opacity = rev;
+      name.style.transform = `translateY(${(1 - rev) * 16}px)`;
+    });
+    if (bar) { const m = maxScroll(); bar.style.width = (m ? (current / m) * 100 : 0) + "%"; }
+    raf = current !== target ? requestAnimationFrame(frame) : null;
   }
-  layout(0);
+  frame();
   if (hsInited) return;
   hsInited = true;
   vp.addEventListener("wheel", (e) => {
     const m = maxScroll(); if (m <= 0) return;
     const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    target = Math.max(0, Math.min(m, target + d * 0.7));
+    target = Math.max(0, Math.min(m, target + d));
     e.preventDefault();
-    if (!raf) raf = requestAnimationFrame(tick);
+    if (!raf) raf = requestAnimationFrame(frame);
   }, { passive: false });
+  window.addEventListener("resize", () => { target = Math.min(target, maxScroll()); if (!raf) raf = requestAnimationFrame(frame); });
 }
 
 // ---------- 遊戲 ----------

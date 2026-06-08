@@ -36,7 +36,7 @@ def apply_state(state: GameState) -> dict:
     """套用憤怒變化:後端硬性夾限 anger_change(防暴衝/防作弊),再夾血條在 0~100,回合 +1。"""
     delta = max(-30, min(30, state["anger_change"]))
     new_anger = max(0, min(100, state["anger"] + delta))
-    return {"anger": new_anger, "turn": state["turn"] + 1}
+    return {"anger": new_anger, "turn": state["turn"] + 1, "anger_history": [new_anger]}
 
 
 def classify_ending(state: GameState) -> dict:
@@ -73,6 +73,14 @@ def set_ending(state: GameState) -> dict:
 
 
 def judge(state: GameState) -> dict:
-    """評審大腦:跳出角色,審視整場對話,輸出結構化報告。"""
-    report = llm.judge_report(state["messages"])
+    """評審大腦:跳出角色,審視整場對話,輸出結構化報告。
+
+    連同結局與憤怒值軌跡一起餵給評審,讓評分呼應勝負、不與結果矛盾。
+    """
+    report = llm.judge_report(
+        state["messages"],
+        ending_type=state["ending_type"],
+        anger_history=state.get("anger_history"),
+        max_turns=state["max_turns"],
+    )
     return {"report": report.model_dump()}

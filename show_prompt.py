@@ -60,9 +60,10 @@ def main():
     llmmod._real_customer_turn(init["system_prompt"], anger, messages, player_input)
 
     print("\n############ 二、評審大腦 judge_report 收到的 prompt ############")
-    # 評審看的是「整場對話」,這裡用上面累積的 messages 當例子
+    # 評審看的是「整場對話」+「本場結果」,這裡用上面累積的 messages 當例子
     full = messages + [HumanMessage(player_input), AIMessage("(奧客回應)")]
-    llmmod._real_judge_report(full)
+    note = llmmod._outcome_note("fail", [50, 60, 72, 95], 8)
+    llmmod._real_judge_report(full, note)
 
 
 if __name__ == "__main__":

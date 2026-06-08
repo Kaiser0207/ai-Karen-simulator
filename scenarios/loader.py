@@ -54,6 +54,7 @@ def load(scenario_id: str) -> dict:
         "system_prompt": _build_system_prompt(scenario),
         "max_turns": scenario["max_turns"],
         "anger": scenario["initial_anger"],
+        "anger_history": [scenario["initial_anger"]],  # 開局值,後續每回合 apply_state 會追加
         "turn": 0,
         "messages": [AIMessage(scenario["opening_line"])],
         "player_input": "",

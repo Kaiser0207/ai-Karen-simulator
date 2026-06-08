@@ -41,10 +41,15 @@ ENDING_LABEL = {
 # ====================================================================
 # 視覺輔助
 # ====================================================================
-def anger_html(anger: int) -> str:
+def anger_html(anger: int, turn: int | None = None, max_turns: int | None = None) -> str:
     color = "#e74c3c" if anger >= 70 else "#f39c12" if anger >= 40 else "#2ecc71"
+    turn_line = ""
+    if turn is not None and max_turns:
+        turn_line = (f'<div style="font-weight:600;color:#607d8b;margin-bottom:6px;">'
+                     f'🔄 回合 {turn}/{max_turns}</div>')
     return f"""
     <div style="margin:4px 0;">
+      {turn_line}
       <div style="font-weight:600;margin-bottom:4px;">😠 憤怒值 {anger}/100</div>
       <div style="background:#eceff1;border-radius:10px;overflow:hidden;height:22px;">
         <div style="width:{anger}%;height:100%;background:{color};
@@ -142,7 +147,7 @@ def start_game(scenario_id):
     chat = [{"role": "assistant", "content": init["scenario"]["opening_line"]}]
     return (
         chat,                       # chatbot
-        anger_html(init["anger"]),  # anger_box
+        anger_html(init["anger"], 0, init["max_turns"]),  # anger_box(回合 0 = 尚未出手)
         sid,                        # st_sid
         init,                       # st_init
         True,                       # st_first
@@ -195,15 +200,18 @@ def player_say(text, chat, sid, init, first, done, anger_hist, emotion_hist):
     after_reply = base + [user_msg, {"role": "assistant", "content": result["ai_reply"]}]
 
     if not result.get("ended"):
-        yield (after_reply, anger_html(anger), gr.update(value="", interactive=True),
+        yield (after_reply, anger_html(anger, result["turn"], result["max_turns"]),
+               gr.update(value="", interactive=True),
                gr.update(interactive=True), gr.update(), gr.update(), gr.update(visible=False),
                False, False, new_anger_hist, new_emotion_hist)
         return
 
-    # ③ 結束:先顯示結局台詞(報告還沒出)
+    # ③ 結束:把奧客本回合反應與預寫結局台詞合併成「同一句收尾」,避免連續兩則氣泡。
     ending_line = result["messages"][-1].content
-    after_ending = after_reply + [{"role": "assistant", "content": ending_line}]
-    yield (after_ending, anger_html(anger), gr.update(value="", interactive=False),
+    final_say = f"{result['ai_reply']}\n\n{ending_line}"
+    after_ending = base + [user_msg, {"role": "assistant", "content": final_say}]
+    anger_box_end = anger_html(anger, result["turn"], result["max_turns"])
+    yield (after_ending, anger_box_end, gr.update(value="", interactive=False),
            gr.update(interactive=False), gr.update(), gr.update(), gr.update(visible=False),
            False, True, new_anger_hist, new_emotion_hist)
 
@@ -215,7 +223,7 @@ def player_say(text, chat, sid, init, first, done, anger_hist, emotion_hist):
     )
 
     # ④ 最後才出現評審報告
-    yield (after_ending, anger_html(anger), gr.update(interactive=False),
+    yield (after_ending, anger_box_end, gr.update(interactive=False),
            gr.update(interactive=False), report_md(result["ending_type"], result["report"]),
            radar_fig(result["report"]), gr.update(visible=True),
            False, True, new_anger_hist, new_emotion_hist)

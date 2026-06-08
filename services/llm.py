@@ -34,10 +34,12 @@ def customer_turn(system_prompt: str, anger: int, messages: list, player_input: 
     return _real_customer_turn(system_prompt, anger, messages, player_input)
 
 
-def judge_report(messages: list) -> JudgeReport:
+def judge_report(messages: list, ending_type: str | None = None,
+                 anger_history: list | None = None, max_turns: int | None = None) -> JudgeReport:
+    note = _outcome_note(ending_type, anger_history, max_turns)
     if USE_MOCK:
-        return _mock_judge_report(messages)
-    return _real_judge_report(messages)
+        return _mock_judge_report(messages, ending_type)
+    return _real_judge_report(messages, note)
 
 
 # ====================================================================
@@ -120,7 +122,7 @@ def _mock_customer_turn(anger: int, player_input: str) -> CustomerTurn:
     )
 
 
-def _mock_judge_report(messages: list) -> JudgeReport:
+def _mock_judge_report(messages: list, ending_type: str | None = None) -> JudgeReport:
     # 只看玩家(human)講的話來評分
     player_lines = [_text(m) for m in messages if _role(m) == "human"]
     n = max(1, len(player_lines))
@@ -142,12 +144,22 @@ def _mock_judge_report(messages: list) -> JudgeReport:
         bad.append("出現官腔/推託字眼(如『規定』『沒辦法』),容易火上加油 → 改成『我來幫您看看怎麼處理最好』。")
     if not apo:
         bad.append("整場較少表達同理,建議先承接情緒再談方案。")
+
+    # 依結局校準:讓 mock 報告也呼應勝負,不只看關鍵字(對應真實評審的 outcome-aware)
+    if ending_type == "fail":
+        empathy, crisis = min(empathy, 50), min(crisis, 45)
+        bad.append("最終仍讓顧客情緒徹底爆走(砸店/投訴),危機應變與情緒承接需大幅加強。")
+    elif ending_type == "timeout":
+        crisis = min(crisis, 55)
+        bad.append("拖到回合用盡仍未提出具體可行方案,溝通效率不足。")
+
     if not good:
         good.append("(本場無明顯亮點)")
     if not bad:
         bad.append("(本場無明顯失誤)")
 
-    summary = "溝通表現良好,同理與方案兼具。" if empathy and crisis else "仍有進步空間,留意先同理、再給具體方案。"
+    win = ending_type == "success"
+    summary = "溝通表現良好,同理與方案兼具,成功化解。" if (empathy and crisis and win) else "仍有進步空間,留意先同理、再給具體方案。"
 
     return JudgeReport(
         empathy_score=empathy,
@@ -174,6 +186,31 @@ def _text(m) -> str:
     if isinstance(m, dict):
         return m.get("content", "")
     return getattr(m, "content", "")
+
+
+# ====================================================================
+# 評審情境補充(讓評審知道勝負與憤怒軌跡)
+# ====================================================================
+_ENDING_DESC = {
+    "fail": "失敗 —— 顧客憤怒爆表、當場翻臉或要投訴",
+    "success": "成功 —— 顧客消氣,願意接受處理而和解",
+    "timeout": "超時 —— 回合用盡仍未能有效化解,顧客不耐離開",
+}
+
+
+def _outcome_note(ending_type, anger_history, max_turns) -> str:
+    """組一段「本場結果」說明,連同對話一起給評審,讓評分呼應勝負。"""
+    parts = [f"【本場結果】結局:{_ENDING_DESC.get(ending_type, ending_type or '未知')}。"]
+    if anger_history:
+        traj = " → ".join(str(a) for a in anger_history)
+        parts.append(
+            f"顧客憤怒值軌跡(0=完全消氣,100=爆表):{traj};"
+            f"起始 {anger_history[0]},最終 {anger_history[-1]}。"
+        )
+        if max_turns:
+            parts.append(f"共進行 {len(anger_history) - 1}/{max_turns} 回合。")
+    parts.append("請依此結果校準分數,報告內容不得與結果矛盾。")
+    return " ".join(parts)
 
 
 # ====================================================================
@@ -218,8 +255,12 @@ def _real_customer_turn(system_prompt, anger, messages, player_input) -> Custome
     )
 
 
-def _real_judge_report(messages) -> JudgeReport:
+def _real_judge_report(messages, outcome_note: str = "") -> JudgeReport:
     from langchain_core.messages import SystemMessage
 
     llm = _get_chat(config.JUDGE_MODEL, temperature=0.2).with_structured_output(JudgeReport)
-    return llm.invoke([SystemMessage(content=_judge_system_prompt()), *messages])
+    msgs = [SystemMessage(content=_judge_system_prompt())]
+    if outcome_note:
+        msgs.append(SystemMessage(content=outcome_note))
+    msgs.extend(messages)
+    return llm.invoke(msgs)

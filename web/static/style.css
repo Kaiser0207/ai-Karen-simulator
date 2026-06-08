@@ -28,8 +28,8 @@
   --shadow-sm:  0 6px 18px rgba(14,14,14,0.09);
 
   --f-display: 'Justus', 'Anton', 'Noto Sans TC', serif;
-  --f-head:    'Syne', 'Archivo', 'Noto Sans TC', sans-serif;
-  --f-body:    'Outfit', 'Noto Sans TC', system-ui, sans-serif;
+  --f-head:    'Syne', 'Archivo', 'Noto Serif TC', serif;   /* 中文用明體 */
+  --f-body:    'Outfit', 'Noto Serif TC', system-ui, serif;  /* 中文用明體 */
   --f-mono:    'JetBrains Mono', monospace;
   --f-num:     'Bebas Neue', 'Anton', sans-serif;
 }
@@ -61,12 +61,13 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .panel { flex: 0 0 auto; height: 100%; will-change: width; }
 
 /* 開場 panel:大字標(寬度由 JS 控,標題會縮成左側細條)*/
-.panel-intro { width: 55vw; min-width: 300px; padding: 48px 50px 56px;
-  display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+.panel-intro { width: 55vw; min-width: 300px; overflow: hidden; display: flex; align-items: flex-end; }
+.intro-inner { width: 55vw; min-width: 300px; flex: 0 0 auto; padding: 48px 50px 56px;
+  display: flex; flex-direction: column; justify-content: flex-end; will-change: transform, opacity; }
 .kicker { font-family: var(--f-mono); font-size: 12px; font-weight: 700;
   letter-spacing: .26em; color: var(--red); margin-bottom: 18px; white-space: nowrap; }
-.akaru-mark { font-family: var(--f-display); font-weight: 700;
-  font-size: clamp(2.2rem, 5vw, 4.6rem); line-height: 1.0; letter-spacing: -.01em;
+.akaru-mark { font-family: var(--f-display); font-weight: 700; font-style: normal;
+  font-size: clamp(2.8rem, 6.6vw, 7.2rem); line-height: 0.94; letter-spacing: -.015em;
   margin: 0; color: var(--ink); white-space: nowrap; }
 .akaru-desc { color: var(--muted); max-width: 420px; margin: 24px 0 0; font-size: 1.02rem; }
 .akaru-foot { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 28px;

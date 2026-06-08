@@ -67,6 +67,7 @@ let hsInited = false;
 function initHScroll() {
   const vp = $("#akaru-viewport"), track = $("#h-track"), bar = $("#scroll-bar");
   const intro = track && track.querySelector(".panel-intro");
+  const introInner = intro && intro.querySelector(".intro-inner");
   const items = track ? [...track.querySelectorAll(".panel-okeke")] : [];
   const soon = track && track.querySelector(".panel-soon");
   if (!vp || !track || !intro) return;
@@ -74,13 +75,17 @@ function initHScroll() {
   // 手風琴:標題占左 ~55%;右側關卡依「離焦點距離」縮放,當前關卡放大、大名隨寬度淡入。
   // 不平移 track,靠 flex 依寬度重排(標題會縮成左側細條,符合 AKARU)。
   const STEP = 420;            // 每滾一個關卡需要的滾動量(px)
-  const TMAX = 55, TMIN = 12;  // 標題寬 vw:滿版 → 左側細條
+  const TMAX = 56, TMIN = 4;   // 標題寬 vw:滿版 → 幾乎清空(內容靠左、超出裁切 → 往右離開感)
   const WMAX = 54, WMIN = 15, SOON = 14;
   let target = 0, current = 0, raf = null;
   const maxScroll = () => STEP * items.length;
 
   function layout(p) {         // p:0=標題滿版, 1=第1關 active, 2=第2關 active…
     intro.style.width = (TMIN + (TMAX - TMIN) * Math.max(0, 1 - p)) + "vw";
+    if (introInner) {  // 標題內容往右平移 + 淡出 → 被 panel 裁切,做出「往右離開」
+      introInner.style.transform = `translateX(${Math.min(1, p) * 36}vw)`;
+      introInner.style.opacity = `${Math.max(0, 1 - p * 0.85)}`;
+    }
     items.forEach((el, j) => {
       const d = Math.abs(p - 1 - j);
       const f = Math.max(0, 1 - d / 1.3);                 // 1=正中(最大),0=遠(最小)
@@ -94,8 +99,8 @@ function initHScroll() {
     if (bar) { const m = maxScroll(); bar.style.width = (m ? (current / m) * 100 : 0) + "%"; }
   }
   function tick() {
-    current += (target - current) * 0.12;
-    if (Math.abs(target - current) < 0.5) current = target;
+    current += (target - current) * 0.075;   // 更小 = 更滑順、更多滑行慣性
+    if (Math.abs(target - current) < 0.4) current = target;
     layout(current / STEP);
     raf = current !== target ? requestAnimationFrame(tick) : null;
   }

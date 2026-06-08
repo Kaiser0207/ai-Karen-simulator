@@ -54,16 +54,18 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .navlink:hover { color: var(--ink); }
 .navlink.is-active { color: var(--ink); }
 
-/* ── 選關卡:AKARU 橫向滾動場景(滾輪 → 全幅水平平移)── */
+/* ── 選關卡:AKARU 式展開橫向輪播(滾輪 → 焦點關卡長大占主畫面)──
+   每塊「外框」寬度由 JS 控(flex-basis,焦點 60% → 下一關 40% → 細條),overflow:hidden;
+   「內層」固定寬 = 焦點寬,所以變寬是揭露更多 slice、內容不被壓扁 → 縮放滑順。*/
 .akaru-scene { position: relative; }
 .akaru-viewport { overflow: hidden; height: calc(100dvh - 84px); }
-.h-track { display: flex; height: 100%; will-change: transform; }
-.panel { flex: 0 0 auto; height: 100%; }
+.h-track { display: flex; height: 100%; }
+.panel { flex: 0 0 auto; height: 100%; overflow: hidden; min-width: 0; }
 
-/* 開場 panel:大字標(寬度由 JS 控,標題會縮成左側細條)*/
-.panel-intro { width: 55vw; min-width: 300px; overflow: hidden; display: flex; align-items: flex-end; }
-.intro-inner { width: 55vw; min-width: 300px; flex: 0 0 auto; padding: 48px 50px 56px;
-  display: flex; flex-direction: column; justify-content: flex-end; will-change: transform, opacity; }
+/* 開場 panel:大字標(外框寬由 JS 控,標題隨焦點離開縮成左側細條)*/
+.panel-intro { display: flex; align-items: flex-end; }
+.intro-inner { width: 52vw; flex: 0 0 auto; padding: 48px 50px 56px;
+  display: flex; flex-direction: column; justify-content: flex-end; will-change: opacity; }
 .kicker { font-family: var(--f-mono); font-size: 12px; font-weight: 700;
   letter-spacing: .26em; color: var(--red); margin-bottom: 18px; white-space: nowrap; }
 .akaru-mark { font-family: var(--f-display); font-weight: 700; font-style: normal;
@@ -76,9 +78,9 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   letter-spacing: .14em; color: var(--red); animation: nudge 1.6s ease-in-out infinite; }
 @keyframes nudge { 0%,100% { transform: translateX(0); } 50% { transform: translateX(9px); } }
 
-/* 奧客 panel:上半漸層視覺 + 下半大名(仿 AKARU 專案頁)*/
-.panel-okeke { width: 62vw; min-width: 320px; display: grid; grid-template-rows: 1fr auto;
-  border-left: 1px solid var(--border); cursor: pointer; }
+/* 奧客 panel:外框裁切;內層固定 60vw(= 焦點寬),上半漸層視覺 + 下半大名(仿 AKARU 專案頁)*/
+.panel-okeke { border-left: 1px solid var(--border); cursor: pointer; }
+.okeke-inner { width: 60vw; height: 100%; display: grid; grid-template-rows: 1fr auto; }
 .okeke-visual { position: relative; overflow: hidden; }
 .okeke-visual::after { content: ""; position: absolute; inset: 0;
   background: linear-gradient(125deg, rgba(255,255,255,.06), rgba(14,14,14,.10)); }
@@ -106,10 +108,10 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   transition: transform .25s, background .25s; }
 .okeke-start:hover { transform: scale(1.08); background: var(--red); }
 
-/* 結尾「敬請期待」panel */
-.panel-soon { width: 30vw; min-width: 200px; display: flex; align-items: center; justify-content: center;
-  border-left: 1px solid var(--border);
+/* 結尾「敬請期待」panel(同樣外框裁切、內層固定寬)*/
+.panel-soon { border-left: 1px solid var(--border);
   background: repeating-linear-gradient(45deg, #dcd4c3, #dcd4c3 12px, #e3dccb 12px, #e3dccb 24px); }
+.soon-inner { width: 40vw; height: 100%; display: flex; align-items: center; justify-content: center; }
 .panel-soon span { font-family: var(--f-head); font-weight: 700; color: var(--muted); text-align: center; }
 
 .scroll-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--border); }
@@ -228,8 +230,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 /* ── 響應式 ── */
 @media (max-width: 900px) {
   .akaru-viewport { height: calc(100dvh - 72px); }
-  .panel-intro { width: 86vw; padding: 30px 24px 36px; }
-  .panel-okeke { width: 90vw; }
+  .intro-inner { padding: 30px 24px 36px; }
   .game-grid { grid-template-columns: 1fr; }
   .topnav { padding: 18px 24px; }
   #view-game, #view-history { padding: 24px; }

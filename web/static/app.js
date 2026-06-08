@@ -38,7 +38,7 @@ async function loadScenarios() {
     const list = await api("/api/scenarios");
     track.querySelectorAll(".panel-okeke, .panel-soon").forEach((n) => n.remove());
     list.forEach((s, i) => track.appendChild(okekePanel(s, i)));
-    track.appendChild(el(`<div class="panel panel-soon"><span>更多奧客<br/>敬請期待…</span></div>`));
+    track.appendChild(el(`<div class="panel panel-soon"><div class="soon-inner"><span>更多奧客<br/>敬請期待…</span></div></div>`));
     initHScroll();
   } catch (e) { toast("載入關卡失敗:" + e.message); }
 }
@@ -47,58 +47,87 @@ function okekePanel(s, i) {
   const num = String(i + 1).padStart(2, "0");
   const p = el(`
     <div class="panel panel-okeke">
-      <div class="okeke-visual" style="background:${st.grad}">
-        <span class="num">${num}</span>
-        <span class="s-genre">${s.genre}</span>
-        <span class="emoji">${st.emoji}</span>
-      </div>
-      <div class="okeke-foot">
-        <div class="okeke-tags"><span class="tag">初始憤怒 ${s.initial_anger}</span><span class="tag">${s.max_turns} 回合</span></div>
-        <h2 class="okeke-bigname">${s.name}</h2>
-        <button class="okeke-start" type="button">開始<br/>挑戰</button>
+      <div class="okeke-inner">
+        <div class="okeke-visual" style="background:${st.grad}">
+          <span class="num">${num}</span>
+          <span class="s-genre">${s.genre}</span>
+          <span class="emoji">${st.emoji}</span>
+        </div>
+        <div class="okeke-foot">
+          <div class="okeke-tags"><span class="tag">初始憤怒 ${s.initial_anger}</span><span class="tag">${s.max_turns} 回合</span></div>
+          <h2 class="okeke-bigname">${s.name}</h2>
+          <button class="okeke-start" type="button">開始<br/>挑戰</button>
+        </div>
       </div>
     </div>`);
   p.addEventListener("click", () => startGame(s.scenario_id));
   return p;
 }
 
-// 水平捲動:滾輪 deltaY → 整條 track 往左平移(純 GPU transform,順);
-// 標題被推出左邊、下一關占主畫面、再下一關露邊;大名依「捲到的位置」淡入。
+// AKARU 式「展開橫向輪播」:滾輪驅動焦點,當前關卡由右側細條「長大」占主畫面(~60%),
+// 下一關 ~40%,其餘成右側細條;標題隨之被推出左邊。每塊內容固定寬(內層),外框只負責裁切
+// 成 slice → 變寬時是「揭露更多」而非把內容壓扁,所以縮放滑順不卡。
 let hsInited = false;
 function initHScroll() {
   const vp = $("#akaru-viewport"), track = $("#h-track"), bar = $("#scroll-bar");
-  const items = track ? [...track.querySelectorAll(".panel-okeke")] : [];
   if (!vp || !track) return;
-  const smooth = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
-  let target = 0, current = 0, raf = null;
-  const maxScroll = () => Math.max(0, track.scrollWidth - vp.clientWidth);
+  const panels = [...track.children];                 // 順序:intro → 各奧客 → 敬請期待
+  const N = panels.length; if (!N) return;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const smooth = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  // 各狀態占視窗比例(內層固定 = FOCUS/TITLE,外框裁切到下列寬度)
+  const TITLE = 0.52, FOCUS = 0.60, NEXT = 0.40, STRIP = 0.14, STRIP2 = 0.085;
+  function fracFor(panel, d) {                          // d = 該塊索引 − 焦點(0=焦點)
+    if (panel.classList.contains("panel-intro")) {
+      if (d <= -1) return 0;                            // 被推出左邊
+      if (d < 0) return TITLE * (1 + d);                // 隨焦點離開而縮去左側
+      return TITLE;
+    }
+    if (d <= -1) return 0;                              // 已捲出左邊
+    if (d < 0) return FOCUS * (1 + d);                  // 正在離場
+    if (d < 1) return lerp(FOCUS, NEXT, d);             // 焦點(60%) → 下一關(40%)
+    if (d < 2) return lerp(NEXT, STRIP, d - 1);         // 下一關(40%) → 細條(14%)
+    if (d < 3) return lerp(STRIP, STRIP2, d - 2);       // 細條 → 更細
+    return STRIP2;                                       // 遠處皆細條
+  }
+
+  const STEP = 480;                                     // 推進一關所需的滾輪量(px)
+  let accum = 0, targetF = 0, curF = 0, raf = null;
   function frame() {
-    current += (target - current) * 0.09;          // lerp:小=更滑、慣性更長
-    if (Math.abs(target - current) < 0.4) current = target;
-    track.style.transform = `translate3d(${-current}px,0,0)`;
-    const vw = vp.clientWidth || 1;
-    items.forEach((el) => {
-      const name = el.querySelector(".okeke-bigname");
-      if (!name) return;
-      const t = (el.offsetLeft - current) / vw;     // 該 panel 左緣相對視窗(0=貼齊左 = 占主畫面)
-      const rev = smooth(1 - Math.min(1, Math.abs(t - 0.06) / 0.46)); // 占住主畫面時才明顯,露邊/離場則隱
-      name.style.opacity = rev;
-      name.style.transform = `translateY(${(1 - rev) * 16}px)`;
+    curF += (targetF - curF) * 0.12;                    // lerp:小=更滑、慣性更長
+    if (Math.abs(targetF - curF) < 0.0015) curF = targetF;
+    const VW = vp.clientWidth || 1;
+    panels.forEach((p, i) => {
+      const frac = fracFor(p, i - curF);
+      p.style.flexBasis = (frac * VW).toFixed(1) + "px";
+      if (p.classList.contains("panel-intro")) {
+        const inner = p.querySelector(".intro-inner");
+        if (inner) inner.style.opacity = smooth(frac / TITLE);
+      } else {
+        const name = p.querySelector(".okeke-bigname");
+        if (name) {
+          const r = smooth((frac - NEXT) / (FOCUS - NEXT)); // 長到 >40%(接近占主畫面)文字才浮現
+          name.style.opacity = r;
+          name.style.transform = `translateY(${((1 - r) * 14).toFixed(1)}px)`;
+        }
+      }
     });
-    if (bar) { const m = maxScroll(); bar.style.width = (m ? (current / m) * 100 : 0) + "%"; }
-    raf = current !== target ? requestAnimationFrame(frame) : null;
+    if (bar) bar.style.width = (N > 1 ? (curF / (N - 1)) * 100 : 0).toFixed(2) + "%";
+    raf = Math.abs(targetF - curF) > 0.0008 ? requestAnimationFrame(frame) : null;
   }
   frame();
   if (hsInited) return;
   hsInited = true;
   vp.addEventListener("wheel", (e) => {
-    const m = maxScroll(); if (m <= 0) return;
     const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    target = Math.max(0, Math.min(m, target + d));
+    accum = clamp(accum + d, 0, (N - 1) * STEP);
+    targetF = accum / STEP;
     e.preventDefault();
     if (!raf) raf = requestAnimationFrame(frame);
   }, { passive: false });
-  window.addEventListener("resize", () => { target = Math.min(target, maxScroll()); if (!raf) raf = requestAnimationFrame(frame); });
+  window.addEventListener("resize", () => { if (!raf) raf = requestAnimationFrame(frame); });
 }
 
 // ---------- 遊戲 ----------

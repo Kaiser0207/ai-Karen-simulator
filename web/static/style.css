@@ -4,21 +4,21 @@
    配色沿用 CineRooms:暖奶油紙底 · 珊瑚紅 #FE494A 主強調 · 蘭花粉 #D480C0 字標。
    ============================================================ */
 :root {
-  --cream-deep: #EAE7E0;   /* AKARU 暖淺灰底 */
-  --cream:      #F3F1EA;
-  --card:       #FFFFFF;    /* AKARU 白盒 */
-  --card2:      #F1EFE8;
-  --ink:        #141414;
+  --cream-deep: #f1efeb;   /* AKARU 主底(近白暖灰)*/
+  --cream:      #ffffff;
+  --card:       #ffffff;    /* 白盒 */
+  --card2:      #e7e4dd;    /* 對話/卡片底,稍深讓白盒跳出 */
+  --ink:        #0e0e0e;    /* 近黑 */
   --muted:      #5b5750;
   --dim:        #8e897e;
-  --red:        #DE6B3B;    /* AKARU 橘:唯一點綴色 */
-  --red-dark:   #c4592d;
-  --magenta:    #C39BAA;    /* AKARU 藕粉:footer 字標 */
-  --navy:       #161616;    /* footer 近黑 */
-  --border:     rgba(20,20,20,0.10);
-  --border-2:   rgba(20,20,20,0.16);
-  --shadow:     0 16px 44px rgba(20,20,20,0.14);
-  --shadow-sm:  0 6px 18px rgba(20,20,20,0.09);
+  --red:        #b692a1;    /* AKARU 藕粉:唯一彩色點綴(kicker/底線/評分)*/
+  --red-dark:   #a17d8c;
+  --magenta:    #b692a1;    /* footer 字標 */
+  --navy:       #0e0e0e;    /* footer 近黑 */
+  --border:     rgba(14,14,14,0.12);
+  --border-2:   rgba(14,14,14,0.18);
+  --shadow:     0 16px 44px rgba(14,14,14,0.14);
+  --shadow-sm:  0 6px 18px rgba(14,14,14,0.09);
 
   --f-display: 'Anton', 'Noto Sans TC', sans-serif;
   --f-head:    'Syne', 'Archivo', 'Noto Sans TC', sans-serif;
@@ -72,12 +72,12 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   border-left: 1px solid var(--border); cursor: pointer; }
 .okeke-visual { position: relative; overflow: hidden; }
 .okeke-visual::after { content: ""; position: absolute; inset: 0;
-  background: linear-gradient(125deg, rgba(0,0,0,.12), rgba(0,0,0,.42)); }
+  background: linear-gradient(125deg, rgba(255,255,255,.06), rgba(14,14,14,.10)); }
 .okeke-visual .num { position: absolute; top: 26px; left: 30px; z-index: 1;
-  font-family: var(--f-num); font-size: 1.6rem; letter-spacing: .1em; color: #fff; opacity: .92; }
+  font-family: var(--f-num); font-size: 1.6rem; letter-spacing: .1em; color: var(--ink); opacity: .82; }
 .okeke-visual .s-genre { position: absolute; top: 26px; right: 30px; z-index: 1; font-family: var(--f-mono);
-  font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #fff;
-  background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); padding: 5px 12px; border-radius: 999px; backdrop-filter: blur(4px); }
+  font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink);
+  background: rgba(255,255,255,.55); border: 1px solid rgba(14,14,14,.18); padding: 5px 12px; border-radius: 999px; }
 .okeke-visual .emoji { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
   font-size: clamp(4rem, 9vw, 7.5rem); filter: drop-shadow(0 6px 22px rgba(0,0,0,.45)); transition: transform .5s cubic-bezier(.22,1,.36,1); }
 .panel-okeke:hover .okeke-visual .emoji { transform: translate(-50%,-50%) scale(1.1); }
@@ -108,8 +108,8 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 /* ── 共用按鈕 ── */
 .btn-red, .btn-ghost { appearance: none; cursor: pointer; font-family: var(--f-head); font-weight: 700;
   border-radius: 999px; padding: 11px 22px; font-size: .98rem; transition: transform .2s, background .2s, box-shadow .2s; }
-.btn-red { background: var(--red); color: #fff; border: none; box-shadow: 0 8px 20px rgba(20,20,20,.18); }
-.btn-red:hover:not(:disabled) { transform: translateY(-2px); background: var(--red-dark); }
+.btn-red { background: var(--ink); color: #f1efeb; border: none; box-shadow: 0 8px 20px rgba(14,14,14,.20); }
+.btn-red:hover:not(:disabled) { transform: translateY(-2px); background: #000; }
 .btn-red:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--border-2); }
 .btn-ghost:hover { border-color: var(--ink); }
@@ -132,7 +132,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .okeke-card .ok-name { font-family: var(--f-head); font-weight: 800; font-size: 1.3rem; margin: 10px 0 6px; }
 .okeke-card .ok-persona { color: var(--muted); font-size: .9rem; margin: 0; }
 .okeke-card .pill { display: inline-block; font-family: var(--f-mono); font-size: 10px; font-weight: 700;
-  letter-spacing: .1em; padding: 4px 10px; border-radius: 999px; color: #fff; }
+  letter-spacing: .1em; padding: 4px 10px; border-radius: 999px; color: var(--ink); }
 .meter-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
 .meter-turn { font-family: var(--f-mono); font-size: 12px; color: var(--dim); letter-spacing: .08em; }
 .meter-anger { font-weight: 700; }

@@ -23,3 +23,8 @@ dependencies = [
 # 宣告自己為獨立 workspace 根目錄,不併入上層 /home/brant/Project 的 workspace
 [tool.uv.workspace]
 members = []
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

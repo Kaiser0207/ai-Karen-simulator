@@ -91,7 +91,9 @@
 - **#4 SQLite 並發**:連線加 `timeout=30` + `PRAGMA journal_mode=WAL`;用 `_DB_LOCK` 把 graph 讀寫序列化(避免單連線多執行緒同 cursor)。
 - **#5 結構化輸出無 fallback**:`services/llm._invoke_structured` 解析失敗退避重試 3 次;
   奧客全失敗 → 回中性台詞不卡關;評審全失敗 → 退回 mock 關鍵字報告(結束一定有結算)。
-- 待辦:補單元測試(怒值邊界、結局優先級、mock 評分)。
+- **單元測試**(`tests/`,pytest):結局優先級 8 例(含 #1 血條歸零不搶判、#2 success>timeout)、
+  apply_state 夾限/遞增/軌跡 7 例、mock 奧客+評審 7 例,共 **21 passed**。`uv add --dev pytest`。
+- API 端對端手測:三結局(success via ended / fail 爆表 / 續行)、anger/emotion_history 長度皆正確。
 
 ### 後端分析待辦(2026-06-09 盤點,前端穩定後再做)
 高優先:

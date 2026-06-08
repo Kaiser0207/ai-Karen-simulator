@@ -4,7 +4,8 @@
 > *AI Difficult Customer Simulator*
 
 玩家扮演店員,在有限回合內安撫 AI 扮演的奧客。每回合 AI 評估你的話術、調整「憤怒值」;
-憤怒爆表=砸店(失敗),歸零=和解(成功),回合用完=超時。結束後由 AI 評審產出培訓報告。
+憤怒爆表=砸店(失敗),AI 判定你提出完美方案/達成和解=成功(由 AI 決定,非血條歸零),回合用完=超時。
+結束後由 AI 評審產出培訓報告。
 
 設計文件見 `../indextts2_r/lang_doc/設計文件.md`;新手導覽與逐課教材見 `docs/`。
 
@@ -19,10 +20,11 @@
 
 ```bash
 uv run python app.py        # Gradio 網頁(預設 http://127.0.0.1:7860)
-uv run python -m web.server # 自訂網頁前端(CineRooms 風格,http://127.0.0.1:8000)
+uv run python -m web.server # 自訂網頁前端(AKARU 風「I Want to Speak to the Manager!」,http://127.0.0.1:8000)
 uv run python run_demo.py   # 純文字驗證:mock 跑三種結局
-uv run python smoke_test.py # 真實 Gemini 跑一回合
+uv run python smoke_test.py # 真實 LLM 跑一回合
 uv run python show_prompt.py# 看實際送給 LLM 的 prompt(不呼叫 API)
+OKEKE_USE_MOCK=1 uv run pytest # 單元/端對端測試(免 API key)
 ```
 
 ## 目前進度
@@ -45,6 +47,10 @@ uv run python show_prompt.py# 看實際送給 LLM 的 prompt(不呼叫 API)
 - Gradio 網頁:串流式即時回饋、彩色憤怒進度條、結算雷達圖
 - 對話存檔(`logs/`)+ 歷史紀錄頁回放(對話、情緒/憤怒軌跡、報告)
 - 語音輸入(麥克風 → faster-whisper → 繁中,GPU 加速,啟動預載)
+- 自訂網頁前端(`web/`:FastAPI + 原生 HTML/CSS/JS,AKARU 風橫向選關卡、即時對戰、歷史回放;免 build)
+- 結構化輸出解析失敗自動重試 + 後備(奧客中性台詞 / 評審退關鍵字報告,不會卡死或無報告)
+- 工作階段持久化:伺服器重啟可從 checkpointer 還原進行中的對局
+- 單元 + 端對端測試(`tests/`,pytest;結局優先級、憤怒值夾限、mock 評分、整場流程)
 
 ## 結構
 
@@ -64,10 +70,14 @@ services/
   llm.py          # 奧客大腦 + 評審(mock 與真實 Gemini)
   stt.py          # 語音轉文字(faster-whisper + opencc,GPU 預載)
 scenarios/
-  loader.py       # 載入關卡 + 組 system_prompt + 建開局 state
+  loader.py       # 載入關卡(載入即驗證欄位)+ 組 system_prompt + 建開局 state
   *.json          # 奧客角色設定(zhang_dama / liu_dong)
 prompts/          # customer_system.txt / judge_system.txt
-docs/             # 功能架構、LLM 詳解、開發錯誤紀錄、逐課學習教材
+web/              # 自訂網頁前端
+  server.py       # FastAPI 薄層:把 graph 包成 JSON API(/api/scenarios|start|say|history)
+  static/         # 原生 HTML/CSS/JS + 自架字體(免 build)
+tests/            # pytest:結局判定、apply_state、mock 評分、端對端整場
+docs/             # 功能架構、LLM 詳解、開發錯誤紀錄、逐課學習教材;worklog.md / 除錯筆記.md(Kaiser0207)
 logs/             # 每場對話存檔(gitignore)
 ```
 

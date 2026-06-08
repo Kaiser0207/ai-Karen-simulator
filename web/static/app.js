@@ -5,10 +5,10 @@ const $ = (s) => document.querySelector(s);
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstChild; };
 
 const GENRE_STYLE = {
-  "餐飲": { grad: "linear-gradient(145deg,#b5341f,#e8743b)", emoji: "🍜" },
-  "零售": { grad: "linear-gradient(145deg,#243b53,#3d6e8c)", emoji: "🛍️" },
+  "餐飲": { grad: "linear-gradient(160deg,#d98a5e,#bc6238)", emoji: "🍜" },  // AKARU 暖橘
+  "零售": { grad: "linear-gradient(160deg,#9fb8c8,#6f93a8)", emoji: "🛍️" },  // AKARU 灰藍
 };
-const styleFor = (g) => GENRE_STYLE[g] || { grad: "linear-gradient(145deg,#7a2f6a,#d480c0)", emoji: "😤" };
+const styleFor = (g) => GENRE_STYLE[g] || { grad: "linear-gradient(160deg,#c39baa,#a87d8c)", emoji: "😤" };  // AKARU 藕粉
 const angerColor = (a) => (a >= 70 ? "#FE494A" : a >= 40 ? "#f39c12" : "#2e9e6b");
 
 let STATE = { thread: null, maxTurns: 8, busy: false, ended: false };

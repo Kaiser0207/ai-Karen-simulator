@@ -4,21 +4,21 @@
    配色沿用 CineRooms:暖奶油紙底 · 珊瑚紅 #FE494A 主強調 · 蘭花粉 #D480C0 字標。
    ============================================================ */
 :root {
-  --cream-deep: #E3DAC9;
-  --cream:      #F0EAD6;
-  --card:       #FBF7EC;
-  --card2:      #F7F2E6;
-  --ink:        #1A1A1A;
-  --muted:      #5A5A5A;
-  --dim:        #8A8A8A;
-  --red:        #FE494A;
-  --red-dark:   #e23b3c;
-  --magenta:    #D480C0;
-  --navy:       #2f3e4d;
-  --border:     rgba(26,26,26,0.10);
-  --border-2:   rgba(26,26,26,0.16);
-  --shadow:     0 16px 44px rgba(26,26,26,0.12);
-  --shadow-sm:  0 6px 18px rgba(26,26,26,0.08);
+  --cream-deep: #EAE7E0;   /* AKARU 暖淺灰底 */
+  --cream:      #F3F1EA;
+  --card:       #FFFFFF;    /* AKARU 白盒 */
+  --card2:      #F1EFE8;
+  --ink:        #141414;
+  --muted:      #5b5750;
+  --dim:        #8e897e;
+  --red:        #DE6B3B;    /* AKARU 橘:唯一點綴色 */
+  --red-dark:   #c4592d;
+  --magenta:    #C39BAA;    /* AKARU 藕粉:footer 字標 */
+  --navy:       #161616;    /* footer 近黑 */
+  --border:     rgba(20,20,20,0.10);
+  --border-2:   rgba(20,20,20,0.16);
+  --shadow:     0 16px 44px rgba(20,20,20,0.14);
+  --shadow-sm:  0 6px 18px rgba(20,20,20,0.09);
 
   --f-display: 'Anton', 'Noto Sans TC', sans-serif;
   --f-head:    'Syne', 'Archivo', 'Noto Sans TC', sans-serif;
@@ -81,13 +81,15 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .okeke-visual .emoji { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
   font-size: clamp(4rem, 9vw, 7.5rem); filter: drop-shadow(0 6px 22px rgba(0,0,0,.45)); transition: transform .5s cubic-bezier(.22,1,.36,1); }
 .panel-okeke:hover .okeke-visual .emoji { transform: translate(-50%,-50%) scale(1.1); }
-.okeke-foot { background: var(--card); padding: 22px 30px 30px; position: relative;
-  display: flex; flex-direction: column; gap: 12px; }
+.okeke-foot { background: var(--card2); padding: 22px 30px 30px; position: relative;
+  display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .okeke-tags { display: flex; gap: 10px; }
 .okeke-tags .tag { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; color: var(--muted);
   border: 1px solid var(--border-2); border-radius: 999px; padding: 4px 12px; }
-.okeke-bigname { font-family: var(--f-head); font-weight: 800; font-size: clamp(2rem, 4vw, 3.4rem);
-  line-height: 1.02; margin: 2px 0 0; color: var(--ink); max-width: 70%; }
+/* AKARU 式白盒大名 */
+.okeke-bigname { display: inline-block; font-family: var(--f-head); font-weight: 800;
+  font-size: clamp(1.8rem, 3.6vw, 3rem); line-height: 1.06; margin: 2px 0 0; color: var(--ink);
+  background: #fff; padding: 6px 14px; box-shadow: 5px 5px 0 rgba(20,20,20,.13); max-width: 78%; }
 .okeke-start { position: absolute; right: 30px; bottom: 28px; width: 86px; height: 86px; border-radius: 50%;
   background: var(--ink); color: #F0EAD6; border: none; cursor: pointer; line-height: 1.15;
   font-family: var(--f-head); font-weight: 700; font-size: .85rem; box-shadow: var(--shadow);
@@ -106,7 +108,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 /* ── 共用按鈕 ── */
 .btn-red, .btn-ghost { appearance: none; cursor: pointer; font-family: var(--f-head); font-weight: 700;
   border-radius: 999px; padding: 11px 22px; font-size: .98rem; transition: transform .2s, background .2s, box-shadow .2s; }
-.btn-red { background: var(--red); color: #fff; border: none; box-shadow: 0 8px 20px rgba(254,73,74,.32); }
+.btn-red { background: var(--red); color: #fff; border: none; box-shadow: 0 8px 20px rgba(20,20,20,.18); }
 .btn-red:hover:not(:disabled) { transform: translateY(-2px); background: var(--red-dark); }
 .btn-red:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--border-2); }
@@ -153,7 +155,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .composer input { flex: 1; font-family: var(--f-body); font-size: 1rem; color: var(--ink);
   background: var(--card); border: 1px solid var(--border-2); border-radius: 999px; padding: 13px 20px; outline: none;
   transition: border-color .2s, box-shadow .2s; }
-.composer input:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(254,73,74,.16); }
+.composer input:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(222,107,59,.18); }
 
 /* ── 評審報告 ── */
 .report-overlay { position: fixed; inset: 0; background: rgba(26,26,26,.55); backdrop-filter: blur(4px);
@@ -169,7 +171,7 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .metric-top { display: flex; justify-content: space-between; font-size: .9rem; margin-bottom: 5px; }
 .metric-top b { font-family: var(--f-num); font-size: 1.15rem; }
 .metric-bar { height: 8px; background: #e7e0d0; border-radius: 999px; overflow: hidden; }
-.metric-fill { height: 100%; background: linear-gradient(90deg, var(--red), #ff7a6b); border-radius: 999px; }
+.metric-fill { height: 100%; background: linear-gradient(90deg, var(--red), #f0a878); border-radius: 999px; }
 .report-list { margin: 6px 0 16px; padding: 0; list-style: none; }
 .report-list li { padding: 7px 0 7px 22px; position: relative; font-size: .94rem; border-bottom: 1px dashed var(--border); }
 .report-list.good li::before { content: "✓"; position: absolute; left: 0; color: #2e9e6b; font-weight: 700; }

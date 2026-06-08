@@ -31,6 +31,12 @@
   - 底部紅色進度條;結尾放「敬請期待」panel 示意可橫向延伸。
 - 建立長期文件習慣:`docs/worklog.md` + `docs/除錯筆記.md`,每次開發都更新(與朋友 docs 區隔)。
 
+### 2026-06-09 AKARU 細修
+- 配色改用 AKARU 實際 12 色盤(底 #f1efeb、灰藍 #bfccd8、近黑 #0e0e0e、藕粉 #b692a1、灰綠 #798e7b、白)。
+- 遊戲英文名定案:**I Want to Speak to the Manager!**;英文字體用自架 **Justus-Bold.ttf**(`web/static/fonts/`,`@font-face`)。
+- 選關卡改 AKARU「手風琴」:標題占左 ~55%、右側關卡依離焦點距離縮放(最多 3 個漸小)、
+  滾輪驅動、當前關卡放大、白盒大名隨寬度淡入(不平移 track,靠 flex 重排)。
+
 ### 待辦
-- 遊戲英文名:待定(目前 placeholder「KAREN SIMULATOR」)。
-- 視實際畫面微調 AKARU 場景(panel 寬度、緩動速度、配色、行動裝置觸控)。
+- 依實際畫面微調手風琴常數(STEP 緩動、WMAX/WMIN、淡入門檻、行動裝置觸控)。
+- Phase 5 TTS(主線,仍未動)。

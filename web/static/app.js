@@ -66,28 +66,49 @@ function okekePanel(s, i) {
 let hsInited = false;
 function initHScroll() {
   const vp = $("#akaru-viewport"), track = $("#h-track"), bar = $("#scroll-bar");
-  if (!vp || !track) return;
-  const maxX = () => Math.max(0, track.scrollWidth - vp.clientWidth);
+  const intro = track && track.querySelector(".panel-intro");
+  const items = track ? [...track.querySelectorAll(".panel-okeke")] : [];
+  const soon = track && track.querySelector(".panel-soon");
+  if (!vp || !track || !intro) return;
+
+  // 手風琴:標題占左 ~55%;右側關卡依「離焦點距離」縮放,當前關卡放大、大名隨寬度淡入。
+  // 不平移 track,靠 flex 依寬度重排(標題會縮成左側細條,符合 AKARU)。
+  const STEP = 420;            // 每滾一個關卡需要的滾動量(px)
+  const TMAX = 55, TMIN = 12;  // 標題寬 vw:滿版 → 左側細條
+  const WMAX = 54, WMIN = 15, SOON = 14;
   let target = 0, current = 0, raf = null;
+  const maxScroll = () => STEP * items.length;
+
+  function layout(p) {         // p:0=標題滿版, 1=第1關 active, 2=第2關 active…
+    intro.style.width = (TMIN + (TMAX - TMIN) * Math.max(0, 1 - p)) + "vw";
+    items.forEach((el, j) => {
+      const d = Math.abs(p - 1 - j);
+      const f = Math.max(0, 1 - d / 1.3);                 // 1=正中(最大),0=遠(最小)
+      el.style.width = (WMIN + (WMAX - WMIN) * f) + "vw";
+      const name = el.querySelector(".okeke-bigname");
+      const rev = Math.max(0, Math.min(1, (f - 0.55) / 0.45));  // 夠大才浮現大名
+      if (name) { name.style.opacity = rev; name.style.transform = `translateY(${(1 - rev) * 14}px)`; }
+      el.classList.toggle("is-active", f > 0.6);
+    });
+    if (soon) soon.style.width = SOON + "vw";
+    if (bar) { const m = maxScroll(); bar.style.width = (m ? (current / m) * 100 : 0) + "%"; }
+  }
   function tick() {
     current += (target - current) * 0.12;
-    if (Math.abs(target - current) < 0.4) current = target;
-    track.style.transform = `translate3d(${-current}px,0,0)`;
-    if (bar) { const m = maxX(); bar.style.width = (m ? (current / m) * 100 : 0) + "%"; }
+    if (Math.abs(target - current) < 0.5) current = target;
+    layout(current / STEP);
     raf = current !== target ? requestAnimationFrame(tick) : null;
   }
-  // reset 位置
-  target = 0; current = 0; track.style.transform = "translate3d(0,0,0)"; if (bar) bar.style.width = "0%";
+  layout(0);
   if (hsInited) return;
   hsInited = true;
   vp.addEventListener("wheel", (e) => {
-    const m = maxX(); if (m <= 0) return;
+    const m = maxScroll(); if (m <= 0) return;
     const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    target = Math.max(0, Math.min(m, target + d));
+    target = Math.max(0, Math.min(m, target + d * 0.9));
     e.preventDefault();
     if (!raf) raf = requestAnimationFrame(tick);
   }, { passive: false });
-  window.addEventListener("resize", () => { target = Math.min(target, maxX()); if (!raf) raf = requestAnimationFrame(tick); });
 }
 
 // ---------- 遊戲 ----------

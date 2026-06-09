@@ -11,3 +11,6 @@ __pycache__/
 *.db-shm
 *.db-wal
 logs/
+
+# 背景音樂:只 commit 轉好的 mp3(~12MB);原始 wav(~125MB)留本機、不進 repo
+music/*.wav

@@ -155,3 +155,84 @@
 
 ### 待辦(前端)
 - 依實際畫面微調手感(STEP 1100、lerp 0.12、LEAD/WIN/step、焦點寬 0.60/下一關 0.40)、行動裝置觸控。
+
+### 2026-06-09 模型混搭 + 彈窗加寬 + 自訂滑桿 + 難度計劃
+- **模型混搭(.env)**:`CUSTOMER_MODEL=gemini-2.5-flash-lite`(實測中句約 1.2s、長句 1.6s,比 flash 關 thinking 的 7.6s 再快 ~5×,現場 demo 不卡)/ `JUDGE_MODEL=gemini-2.5-flash`(報告保品質,結束才跑一次)。重啟生效。
+- **結算/歷史彈窗加寬**:`.report-card` 寬度改 `min(92vw, clamp(460px, 40vw, 860px))`(約螢幕 40%、置中、下限 460/上限 860、手機 ≤92vw)。報告與歷史回放共用,一起變寬。
+- **語音滑桿全自訂(融入結算語彙)**:`#vs-sec` 改純自訂圓角滑桿——軌道 8px 圓角、填充與拇指用**本關顏色** `--lvl`(`startGame` 依 genre 寫入 `.game-side`)、拇指白底彩框 + 陰影、hover/active 放大。填充比例由 `updateVoiceUI` 算 `--fill`。checkbox accent 也改本關色。webkit/moz 雙前綴。
+- **計劃文件**:新增 [`難度與關卡計劃.md`](難度與關卡計劃.md)(三階難度 easy/normal/hard、6–8 關擴充清單、前後端最小改動、選用怒氣衰減係數、實作順序)。
+
+### 2026-06-09 趣味性 ① 立繪 + 倒數 + 音效(純前端)
+- **奧客立繪(emoji 換臉)**:`okeke-card` 加圓形 `#okeke-face`,依後端 `emotion`(angry/annoyed/neutral/calm/happy)換 emoji;開場用 `emotionForAnger()`(門檻對齊 `services/llm.py:_emotion_for`)。換臉有 pop 動畫、angry 額外抖動。之後可換手繪圖。
+- **回合倒數(壓力模式)**:新 `.timer-card`(checkbox `#ts-on` + 滑桿 `#ts-sec` 10–60s,預設關)。輪到玩家就 `startTurnTimer()`(RAF 跑 `#timer-bar`),最後 5 秒滴答音 + 變紅 + 卡片告警邊框。時間到:有打字→自動送出;沒打字→爆表音 + 催促 toast + 重新計時。送出/AI 思考/錄音中/離開遊戲都會暫停,回合回來再續。設定存 `localStorage(okeke_timer)`。
+- **音效(WebAudio 即時合成,免音檔)**:`SFX` 模組——倒數滴答、怒氣一回合飆 ≥12 的緊張音、爆表/逾時 buzzer、和解勝利音。開局點擊解鎖 AudioContext。`🔊 音效` checkbox 可關。
+- **本關色貫穿**:立繪外框、計時條、滑桿填充都吃 `--lvl`(`.game-side` 依 genre 設)。
+- 靜態檔即時生效,無需重啟;`node -c app.js` 通過。
+
+### 2026-06-09 趣味性 ② 難度衰減 + 成本預算機制 + 身分簡報 + 4 新關卡
+鎖定決議:固定身分簡報 / 成本中等(超支封頂B)/ 短班次3–4人(無盡留計劃)/ 四新關卡全做。詳見 [`難度與關卡計劃.md`](難度與關卡計劃.md)。
+- **怒氣衰減係數 `calm_resistance`**:`apply_state` 只縮放「安撫成功」的負 delta(`round(delta/resistance)`),惹怒不打折;困難關 1.4 → 安撫 −20 變 −14。scenario 缺省 1.0。
+- **成本預算機制(修『照單全收滿分』)**:
+  - `CustomerTurn` 加 `concession_cost`(0~100,LLM 估這句讓掉多少);mock 用關鍵字(大讓步 55/小讓步 20)。
+  - `GameState` 加 `concession_cost`/`cost_spent`;`apply_state` 累加 `cost_spent`(單值替換,resume 不重複)。
+  - `cost_control_score` **後端公式算**(`nodes._cost_control_score`,中等力道:預算內 100→75、超支線性到 0),覆寫進報告 + 附 `cost_spent`/`cost_budget`。JudgeReport schema 不動(測試不破)。
+  - judge prompt + `_cost_note`:拿公司資源換和平 → compliance 重扣 + 點進可改進。
+  - 報告綜合分改 **4 維平均**(同理/危機/法規/成本控制);前端報告加第 4 條 + 讓步成本提示。
+  - meter 加**讓步成本條**(本關色,超支變紅);`/api/say`/`/api/start` 回 `cost_spent`/`cost_budget`/`concession_cost`。
+  - 真實 Gemini 實測:免單+退費+免費送 → `concession_cost 70`、`cost_spent 70/70`。
+- **身分簡報**:scenario 加 `shop`/`player_role`;`/api/start` 回傳,遊戲 okeke-card 顯示「🏪 店家 · 你的身分:…」。
+- **`swear_level`(0/1/2)**:`loader._build_system_prompt` 依等級附語氣指引(火爆可情緒粗口,禁性/歧視/問候家人)。
+- **4 新關卡**:速食炸雞『雞還在養?』(餐飲 hard sw2)、早餐店常客『不知道我都點什麼?』(餐飲 normal sw1)、3C 維修人為損壞硬凹(客服 hard sw2)、網購瑕疵揚言上消保會(客服 normal sw1)。共 6 關。`客服` 走 fallback 綠。
+- 既有 2 關補齊新欄位;全部 6 關 `loader.load` 驗證通過。
+- 測試:新增 calm_resistance/cost 累加/cost_control 公式共 7 個;**`pytest` 32 passed**。後端改完已重啟(real Gemini, flash-lite)。
+
+### 2026-06-09 選關卡改「難度色階」(班次模式 step 1)
+- 需求(如 AKARU 圖):**藍=簡單 / 粉=中等 / 綠=困難**,一關一關排,捲動機制不變,休息態**藍寬→綠窄**。
+- 前端 `DIFF_STYLE`:easy `#8ca2b4`(rest .16)/ normal `#b692a1`(.11)/ hard `#798e7b`(.075)。
+- `loadScenarios` 依難度排序(easy→normal→hard,同級依初始憤怒);`okekePanel` 顏色/標籤/`data-diff` 改吃難度,emoji 仍依情境。
+- `initHScroll`:`restCache` 依各 panel `data-diff` 給休息態寬度;`fracFor` 收尾插值到該難度寬(藍寬/粉中/綠窄),移除固定 STRIP/STRIP2。
+- 遊戲內 `--lvl`(滑桿/立繪/成本條)+ okeke pill 也改吃難度色,關卡顏色全程一致。
+- `liu_dong` 重標 `easy`(calm_resistance 0.9);`/api/scenarios` 多回 `difficulty`/`shop`。
+- 順序實測:easy 劉董 → normal×4 → hard×2(炸雞哥)。**單關啟動流程不變**(「其餘邏輯一致」)。
+- ⏭ 未做:真正的「多客人佇列」play(服務完一個換下一個 + 班次總報告)+ 簡單/好客內容,為 step 2。
+
+### 2026-06-09 多客人「班次」模式 + 折疊聊天(班次模式 step 2)
+- 點任一難度關卡 = 進入**該難度班次**,連續服務同難度多位客人(從點的那位起、輪一圈)。前端編排,後端 `/api/say` 不動。
+- `startShift(diff,fromId)` → 依 `SCENARIOS`(快取)依難度建佇列 → `startCustomer()` 逐位;結束 `finishCustomer()` 給「下一位客人 → / 看班次總結 →」鈕推進。
+- **聊天紀錄改折疊**:每位客人一個 `.cust-block`(可點標題展開/收合),換下一位自動收合前一位;標題徽章顯示結果色(綠和解/紅客訴/橘逾時)。解決班次對話過長。
+- **班次總報告 `showShiftReport`**:平均分(4 維)、滿意/客訴/逾時數、🔥連續和解、💸總讓步成本 + 每位客人可展開明細(分數條/軌跡/做得好可改進/總評)。
+- `--lvl`/立繪/成本條每位客人重置;`#quit` 重置 SHIFT。移除單關 `startGame`/`showReport`(改 shift 流程)。
+- **2 個好客/簡單關**:客氣詢問退換的林小姐(零售)、順口稱讚的暖心常客(餐飲),`customer_kind:nice`、低怒氣當喘息。共 **8 關**(easy3/normal3/hard2)。
+- 真實實測:免單退費 concession 70;暖心常客怒氣低檔(15→13)、成本 0、流程無誤。`pytest 32 passed`,`node -c` 通過。
+- **修正(原本搞錯)**:選關畫面**只放 3 個難度關卡**(藍簡單/粉中等/綠困難,`tierPanel`),不再攤開 8 個客人;**點進難度才**連續面對該難度多位客人。藍寬→綠窄維持。`startShift(difficulty)` 從第一位開始。
+- **carousel 起始寬度修正**:原本第一關吃 0.40「on-deck」寬,三關加總超過畫面 → 綠色被擠出。`fracFor` 移除 NEXT(0.40),焦點直接收成「難度細條」→ 起始(標題聚焦)時**三色細條並列**(藍 0.16 / 粉 0.11 / 綠 0.075,+標題 0.52 +敬請期待 0.085 = 0.95 全進畫面),如 AKARU 圖。聚焦某關時它長到 FOCUS 0.60。
+
+### 2026-06-09 手繪立繪接入(取代 emoji)
+- 玩家畫了**男生角色 5 表情**(`character_image/{ang,annoy,neu,calm,hap}_boy.png`,黑白線稿、白底、~640²)→ 複製到 `web/static/characters/`。
+- scenario 加 `char` 欄位(`boy`×5 / `girl`×3,依性別);`/api/start` 回傳 `char`。
+- 前端 `setOkekeFace`:有 `char` → 用 `/characters/<前綴>_<角色>.png`(前綴 ang/annoy/neu/calm/hap),**載入失敗(如 girl 尚未畫)`onerror` 退回 emoji**。`STATE.char` 來自 `d.scenario.char`。
+- CSS `.okeke-face.has-img`:124px、白底、`object-fit:cover`、`object-position 50% 18%`(對齊臉)、本關色外框。
+- 男生立繪 server 重啟後生效;女生關卡暫用 emoji,等 `_girl` 圖到位自動換。
+
+### 2026-06-09 立繪補齊 4 套(boy/girl/aunt/uncle)+ 炸雞哥改女
+- 玩家陸續補上 **girl / aunt(大媽)/ uncle(大叔)** 各 5 表情;`neu_aunt` 是 jpg → PIL 轉 png(其餘皆 png,前端硬抓 `.png`)。全部複製到 `web/static/characters/`。
+- 中年人設原本錯配年輕臉 → 重新分配 `char`:**aunt**=張大媽、炸雞姐;**uncle**=劉董、維修客、早餐常客;**girl**=林小姐、暖心常客;**boy**=網購客。char 是自由字串,**前端零改 code** 自動抓圖。
+- **炸雞哥 → 炸雞姐**:`su_shi_chicken` 名稱/persona(中年男子→中年婦人、加「叉腰開嗆」)/`char`(boy→aunt)/`tts_voice`(Yunyang 男聲→Xiaoxiao 女聲)。困難關不再清一色男臉。
+- 班次每難度臉孔不撞:易=叔+女+女、中=媽+叔+男、難=媽+叔。
+- 重啟 server 後 `/api/start` 實測 char 正確流通(炸雞姐 aunt / 劉董 uncle / 張大媽 aunt / 林小姐 girl / 網購客 boy)。
+
+### 2026-06-09 CRAB 語音情緒(SER)訓練完成 — MSP 4 類 LoRA
+- run `msp4_lora_warmA_lr1e4`:MSP-Podcast 8→4 類(Angry/Happy/Neutral/Anxious),warm-start strategyA_fullft,LoRA r16/α32,bs16、contrastive_weight 2.0、lr 1e-4/encoder 1e-5、8 epochs、AMP+grad_ckpt、num_workers 0。**全程 GPU 單跑、無 OOM**(遊戲 server 先關)。
+- LR 校正後不再 collapse(早前 lr 1e-3 崩;改 Strategy A 的 1e-4)。dev macroF1 逐 epoch:0.577→0.544→**0.615**(e2)→0.596→0.592→0.6215(e5)→0.6245(e6)→**0.6265(e7,best)**。**e5→e7 一路爬升、最後 epoch 仍在進步 = epoch 數其實太少**(加到 12~15 大概率更高,ROI > 換全量資料)。e3–4 的下滑是雜訊非過擬合(dev loss 同步下降)。
+- **TEST(6000):macroF1 0.6297 / UAR 0.6323 / loss 0.912**,略高於 dev best → 無過擬合、泛化良好。
+- 各類 F1(test):Angry 0.679(R 0.725,寧可多抓爆氣→**對遊戲有利**)、Happy 0.685(最佳)、Neutral 0.579、Anxious 0.577。
+- **混淆結構**(P/R 反推):**Anxious 被吞進 Neutral**(Anxious R 0.461、Neutral P 0.530)—— 低喚醒、語調平,聲學近似,接近資料天花板,非訓練問題。遊戲核心(爆氣/開心)偵測可靠。
+- 訓練 process 結束後 GPU 歸還(24GB free),**重啟遊戲 server(real Gemini)**,立繪/char/成本/難度全生效。
+- ⏭ 可選:跑精確 NxN 混淆矩陣 + 校準 Angry 閾值;加 epochs 重跑榨分;接 STT→SER 串到語音輸入。
+- 模型架構/準確度完整寫進 **`docs/語音情緒模型.md`**(可放答辯)。
+
+### 2026-06-09 選關 carousel 微調(休息寬 + 標語延後顯示)
+- 三難度休息寬加大 `DIFF_STYLE.rest` 0.16/0.11/0.075 → **0.20/0.16/0.12**:標題 0.52 + 三關 0.48 = 填滿一屏;「敬請期待」溢出被 `overflow:hidden` 裁掉(起始只見藍/粉/綠,捲到底才現)。
+- 標語 `.s-genre`(低怒氣・好安撫…)改包 `.rev` → 休息態藏起、聚焦才逐字上滑(與下方大名同機制);藥丸樣式移到內層 `span` 避免露空殼。
+- 驗:`node -c` OK、`pytest 32 passed`、8 關 JSON 欄位齊全、4×5 立繪齊、靜態檔即時生效。
+- 另記:`localhost:8000` 黑畫面 = IPv6(`::1`)解析坑,改 `127.0.0.1:8000` 解(詳見除錯筆記)。

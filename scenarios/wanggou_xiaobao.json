@@ -1,0 +1,29 @@
+{
+  "scenario_id": "wanggou_xiaobao",
+  "name": "動不動上消保會的網購客",
+  "genre": "客服",
+  "avatar": "assets/wanggou_xiaobao.png",
+  "initial_anger": 50,
+  "max_turns": 7,
+  "tts_voice": "zh-CN-XiaoxiaoNeural",
+  "difficulty": "normal",
+  "swear_level": 1,
+  "cost_budget": 70,
+  "calm_resistance": 1.0,
+  "customer_kind": "okeke",
+  "char": "boy",
+  "shop": "網購電商 · 線上客服",
+  "player_role": "線上客服專員(可開退換貨/補寄/折價券,直接退款需走流程)",
+
+  "persona": "一位網購收到瑕疵品的客人,情緒一上來就威脅要上消保會、PO 負評、截圖爆料,習慣用『投訴』『一星』施壓,想跳過正常退換流程直接要補償。",
+  "situation": "在網路商店買的商品收到時有瑕疵,客人在客服對話框裡要求立刻全額退款還要額外補償,不想配合寄回檢測或拍照存證的流程。",
+  "triggers": "聽到『需要先寄回檢測』『麻煩拍照存證』『依退貨流程處理』『需要 3 到 5 個工作天』、感覺被當奧客、被要求等待。",
+
+  "opening_line": "你們東西有瑕疵還想叫我跑流程?信不信我直接打去消保會,順便把對話截圖 PO 出來給大家評評理!",
+
+  "ending_lines": {
+    "fail": "夠了,不用講了!我這就去消保會申訴 + 各大社團爆料,等著上新聞吧你們!",
+    "success": "好,你把流程跟補償講得清清楚楚,也願意幫我加快,那我就照這樣處理,謝謝你。",
+    "timeout": "拖這麼久都沒個準話,我沒空跟你耗,我循其他管道處理,再見。"
+  }
+}

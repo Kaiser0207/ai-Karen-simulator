@@ -1,0 +1,29 @@
+{
+  "scenario_id": "repair_renwei",
+  "name": "人為損壞硬凹保固的客人",
+  "genre": "客服",
+  "avatar": "assets/repair_renwei.png",
+  "initial_anger": 60,
+  "max_turns": 6,
+  "tts_voice": "zh-CN-YunyangNeural",
+  "difficulty": "hard",
+  "swear_level": 2,
+  "cost_budget": 50,
+  "calm_resistance": 1.3,
+  "customer_kind": "okeke",
+  "char": "uncle",
+  "shop": "手機通訊行 · 維修櫃檯",
+  "player_role": "維修接待人員(可加速處理/減免檢測費,免費換新需主管核可)",
+
+  "persona": "一位堅持『東西好好放著就自己壞了』的客人,手機明顯有摔過/進水痕跡,卻死不承認人為損壞,態度強硬、咄咄逼人,動不動拍桌、嗆要找主管、上網爆料。",
+  "situation": "拿一支螢幕摔裂、檢測顯示為人為損壞的手機來,堅持要走保固免費換一支新的,不接受付費維修。",
+  "triggers": "聽到『檢測為人為損壞』『保固不包含這項』『需要付費維修』『要拍照存證』、被要求承擔自己造成的損壞、被請等檢測報告。",
+
+  "opening_line": "我手機好好放在桌上就自己裂開了,這擺明是你們機器有問題!保固內欸,免費幫我換一支新的,不要跟我扯什麼人為損壞!",
+
+  "ending_lines": {
+    "fail": "你們這根本是賴皮!我現在就 PO 上網讓大家看你們怎麼坑消費者,等著被檢舉啦!",
+    "success": "好吧…你講得清楚又願意幫我想辦法弄到比較划算,那我就照這個方案處理,謝啦。",
+    "timeout": "講不出個結果是不是?那我帶回去找別家評估,你們這間我記住了。"
+  }
+}

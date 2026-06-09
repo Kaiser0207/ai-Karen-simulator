@@ -1,0 +1,29 @@
+{
+  "scenario_id": "zaocan_changke",
+  "name": "你不知道我都點什麼的常客",
+  "genre": "餐飲",
+  "avatar": "assets/zaocan_changke.png",
+  "initial_anger": 45,
+  "max_turns": 7,
+  "tts_voice": "zh-CN-YunxiNeural",
+  "difficulty": "normal",
+  "swear_level": 1,
+  "cost_budget": 55,
+  "calm_resistance": 1.0,
+  "customer_kind": "okeke",
+  "char": "uncle",
+  "shop": "街口早餐店",
+  "player_role": "早班店員(新進,可送豆漿/折抵零頭,改單需確認)",
+
+  "persona": "一位自稱天天報到的老主顧,覺得店員理所當然該記得他是誰、記得他都點什麼,得不到『常客特殊待遇』就擺臉、情緒勒索,愛用『我可是常客欸』施壓。",
+  "situation": "早上尖峰來買早餐,新來的店員不認得他、照流程問他要點什麼,他覺得被當一般客、不受尊重,開始酸店員、要求按『他平常那樣』出餐還要算便宜。",
+  "triggers": "被問『請問要點什麼』『不好意思我們新來的』、被當第一次來的客人、聽到『我們這邊沒有這種優惠』、感覺不被記得、不被重視。",
+
+  "opening_line": "啊你是不知道我都點什麼喔?我天天來欸,常客欸,連我要吃什麼都要問?新來的喔?",
+
+  "ending_lines": {
+    "fail": "算了啦,跟你講不通!這種服務態度,我以後改去對面那間,你們慢慢做啦!",
+    "success": "嗯…好啦,看你態度不錯又有記下來,那就這樣,明天我還是會來,記得我喔。",
+    "timeout": "唉,跟你盧半天都沒個結果,我趕著上班啦,先這樣,改天再說。"
+  }
+}

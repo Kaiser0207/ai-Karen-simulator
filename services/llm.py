@@ -33,6 +33,9 @@ _JUDGE_TEMPLATE: str | None = None
 APOLOGY = ["抱歉", "對不起", "不好意思", "理解", "明白", "辛苦您", "您的心情"]
 SOLUTION = ["免單", "退費", "退款", "折價", "賠", "補一份", "重做", "換", "優惠", "補償"]
 DISMISSIVE = ["規定", "沒辦法", "不行", "不能", "自己", "冷靜", "別激動", "客訴"]
+# 高成本讓步(免費/退錢/破例)→ mock 估 concession_cost 用;真實模式由 LLM 自行評估
+CONCESSION_BIG = ["免單", "免費", "不用錢", "退費", "退款", "退一賠", "賠償", "賠你"]
+CONCESSION_SMALL = ["折價", "打折", "優惠", "送你", "送您", "補一份", "重做", "折扣", "算便宜"]
 
 
 # ====================================================================
@@ -45,11 +48,25 @@ def customer_turn(system_prompt: str, anger: int, messages: list, player_input: 
 
 
 def judge_report(messages: list, ending_type: str | None = None,
-                 anger_history: list | None = None, max_turns: int | None = None) -> JudgeReport:
+                 anger_history: list | None = None, max_turns: int | None = None,
+                 cost_spent: int | None = None, cost_budget: int | None = None) -> JudgeReport:
     note = _outcome_note(ending_type, anger_history, max_turns)
+    cost_note = _cost_note(cost_spent, cost_budget)
     if USE_MOCK:
         return _mock_judge_report(messages, ending_type)
-    return _real_judge_report(messages, note, ending_type)
+    return _real_judge_report(messages, (note + " " + cost_note).strip(), ending_type)
+
+
+def _cost_note(cost_spent, cost_budget) -> str:
+    """組一段「讓步成本」說明給評審,讓質性回饋(summary/可改進)反映是否拿資源換和平。"""
+    if cost_spent is None or cost_budget is None:
+        return ""
+    over = cost_spent > cost_budget
+    tip = ("已超出預算 —— 店員疑似拿公司資源/破例換取和平,請在『可改進』點明,"
+           "並讓 compliance(法規店規遵從)反映此踰矩;切勿因顧客最後滿意就給高分。"
+           if over else
+           "在預算內 —— 若用同理+設限+替代方案低成本化解,值得在『做得好』肯定。")
+    return (f"【讓步成本】本場店員累積讓步成本約 {cost_spent}(可動用預算 {cost_budget})。{tip}")
 
 
 # ====================================================================
@@ -124,11 +141,20 @@ def _mock_customer_turn(anger: int, player_input: str) -> CustomerTurn:
     else:
         reply = _pick(_REPLY_CALM, player_input)
 
+    # 估這句讓掉多少成本:大讓步(免單/退費)高、小讓步(折價/送)中、純同理/設限=0
+    if _contains(player_input, CONCESSION_BIG):
+        cost = 55
+    elif _contains(player_input, CONCESSION_SMALL):
+        cost = 20
+    else:
+        cost = 0
+
     return CustomerTurn(
         reply=reply,
         anger_change=delta,
         ended=ended,
         emotion=_emotion_for(projected),
+        concession_cost=cost,
     )
 
 

@@ -29,6 +29,8 @@ class GameState(TypedDict):
     ai_reply: str  # 本回合奧客台詞
     anger_change: int  # 本回合憤怒變化量(供前端動畫)
     emotion: str  # 本回合情緒標籤(供前端換立繪 / 將來 TTS)
+    concession_cost: int  # 本回合店員讓掉的成本(0~100,由奧客大腦估)
+    cost_spent: int  # 累積讓步成本(apply_state 逐回合累加;單值替換,resume 不會重複累加)
 
     # --- 結束相關 ---
     ended: bool

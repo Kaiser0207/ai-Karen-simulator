@@ -20,6 +20,11 @@ class CustomerTurn(BaseModel):
     anger_change: int = Field(ge=-30, le=30, description="本回合憤怒值變化量,-30 ~ +30")
     ended: bool = Field(description="玩家是否提出完美解決方案,達成和解")
     emotion: Emotion = Field(description="當下情緒標籤(供前端換立繪/將來給 TTS)")
+    concession_cost: int = Field(
+        default=0, ge=0, le=100,
+        description=("店員『這一句』讓掉的成本/原則彈性 0~100:純同理、給資訊、設限、提替代方案=0;"
+                     "小讓步(送小東西/打小折)=10~30;大讓步(免單/退費/退一賠十/破例)=40~100。"),
+    )
 
 
 class JudgeReport(BaseModel):

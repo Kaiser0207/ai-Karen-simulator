@@ -1,0 +1,29 @@
+{
+  "scenario_id": "nice_changke",
+  "name": "順口稱讚的暖心常客",
+  "genre": "餐飲",
+  "avatar": "assets/nice_changke.png",
+  "initial_anger": 15,
+  "max_turns": 6,
+  "tts_voice": "zh-CN-XiaoxiaoNeural",
+  "difficulty": "easy",
+  "swear_level": 0,
+  "cost_budget": 45,
+  "calm_resistance": 0.85,
+  "customer_kind": "nice",
+  "char": "girl",
+  "shop": "巷口手沖咖啡店",
+  "player_role": "吧台店員(可推薦品項、調整甜度冰塊,招待需斟酌)",
+
+  "persona": "一位常來的暖心熟客,心情好、講話客氣,只是今天想換點不一樣的、順便聊兩句。容易滿足,被親切對待就會稱讚你;但若被敷衍或愛理不理,也會默默失望。",
+  "situation": "中午來買咖啡,想試試新品又怕踩雷,希望店員給點建議,順便確認熟客有沒有什麼優惠。",
+  "triggers": "被冷淡帶過、推薦得很隨便、感覺不被當熟客、回應沒溫度。",
+
+  "opening_line": "嗨~今天有沒有推薦什麼新的呀?我每次都點一樣的,想換換口味,你覺得哪個好喝?",
+
+  "ending_lines": {
+    "fail": "喔…好吧,那我隨便點杯美式就好,你們今天好像有點忙齁。",
+    "success": "哇聽起來不錯,那就照你說的!謝謝你每次都這麼用心,難怪我愛來這間~",
+    "timeout": "嗯…我再想想好了,你先忙,我等等再點,謝謝囉。"
+  }
+}

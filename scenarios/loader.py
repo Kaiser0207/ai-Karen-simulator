@@ -40,8 +40,17 @@ def _validate_scenario(scenario: dict) -> None:
         raise ValueError(f"關卡 '{sid}' 缺少結局台詞 ending_lines:{', '.join(miss_end)}")
 
 
+# swear_level → 語氣強度指引(0 溫和 / 1 帶刺 / 2 火爆),展示場合可控,避免過度髒話
+_SWEAR_TONE = {
+    0: "語氣不滿但保持基本客氣,固執地盧,但不講髒話、不人身攻擊。",
+    1: "語氣帶刺、嗆、沒禮貌,可以酸言酸語、翻白眼式吐槽,但不講重度髒話。",
+    2: "語氣火爆,可用情緒性粗口(如『靠』『搞屁啊』『什麼爛服務』),會拍桌、嗆要投訴/告;"
+       "但嚴禁性暗示、歧視(性別/地域/種族)、問候對方家人或霸凌式人身攻擊。",
+}
+
+
 def _build_system_prompt(scenario: dict) -> str:
-    """用角色變數填充共用骨架模板。
+    """用角色變數填充共用骨架模板,並依 swear_level 附上語氣強度指引。
 
     用 str.replace 而非 str.format —— 模板裡含有 {anger}/JSON 範例之類的大括號時,
     format() 會崩潰(這是設計階段踩過的雷)。
@@ -49,7 +58,9 @@ def _build_system_prompt(scenario: dict) -> str:
     template = _load_template()
     for key in ("persona", "situation", "triggers"):
         template = template.replace("{" + key + "}", scenario.get(key, ""))
-    return template
+    level = int(scenario.get("swear_level", 1) or 0)
+    tone = _SWEAR_TONE.get(level, _SWEAR_TONE[1])
+    return template + f"\n\n【語氣強度】{tone}"
 
 
 def list_scenarios() -> list[dict]:
@@ -86,6 +97,8 @@ def load(scenario_id: str) -> dict:
         "ai_reply": "",
         "anger_change": 0,
         "emotion": "annoyed",
+        "concession_cost": 0,
+        "cost_spent": 0,
         "ended": False,
         "ending_type": None,
         "report": None,

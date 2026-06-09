@@ -28,6 +28,7 @@ def customer_brain(state: GameState) -> dict:
         "anger_change": turn.anger_change,
         "emotion": turn.emotion,
         "ended": turn.ended,
+        "concession_cost": turn.concession_cost,
         "messages": [HumanMessage(state["player_input"]), AIMessage(turn.reply)],
     }
 
@@ -35,16 +36,24 @@ def customer_brain(state: GameState) -> dict:
 def apply_state(state: GameState) -> dict:
     """套用憤怒變化:後端硬性夾限 anger_change(防暴衝/防作弊),再夾血條在 0~100,回合 +1。
 
-    同時把本回合情緒追加進 emotion_history(reducer 累加),讓情緒軌跡也由 checkpointer
-    持久化 —— 伺服器重啟仍可從 graph state 還原,不再依賴前端 / 記憶體 session。
+    難度的「怒氣衰減係數」calm_resistance 在這裡生效:只縮放「安撫成功」的負向 delta
+    (困難關同一句好話降的怒氣較少),被惹怒的正向 delta 不打折(被踩雷一樣痛)。
+
+    同時累積本回合的讓步成本 cost_spent(單值替換寫回,resume 不會重複累加),並把本回合情緒
+    追加進 emotion_history(reducer 累加),讓情緒/成本軌跡都由 checkpointer 持久化。
     """
     delta = max(-30, min(30, state["anger_change"]))
+    if delta < 0:  # 只衰減安撫效果,不衰減惹怒
+        resistance = float((state.get("scenario") or {}).get("calm_resistance", 1.0)) or 1.0
+        delta = round(delta / resistance)
     new_anger = max(0, min(100, state["anger"] + delta))
+    cost = max(0, min(100, int(state.get("concession_cost", 0) or 0)))
     return {
         "anger": new_anger,
         "turn": state["turn"] + 1,
         "anger_history": [new_anger],
         "emotion_history": [state.get("emotion", "neutral")],
+        "cost_spent": int(state.get("cost_spent", 0) or 0) + cost,
     }
 
 
@@ -91,15 +100,39 @@ def set_ending(state: GameState) -> dict:
     }
 
 
+def _cost_control_score(cost_spent: int, budget: int) -> int:
+    """讓步成本 → 成本控制分(0~100,後端確定性公式,可解釋)。
+
+    中等力道(超支封頂 B):
+      - 預算內:100 →(花滿預算)75,鼓勵低成本和解。
+      - 超支:75 線性降到 0(花到兩倍預算歸零)。
+    讓「照單全收/無腦讓步」成本爆表 → 成本控制分低 → 拉低綜合分。
+    """
+    budget = max(1, int(budget or 1))
+    c = max(0, int(cost_spent or 0))
+    if c <= budget:
+        return int(round(100 - (c / budget) * 25))
+    return max(0, int(round(75 - (c - budget) / budget * 75)))
+
+
 def judge(state: GameState) -> dict:
     """評審大腦:跳出角色,審視整場對話,輸出結構化報告。
 
-    連同結局與憤怒值軌跡一起餵給評審,讓評分呼應勝負、不與結果矛盾。
+    連同結局、憤怒值軌跡、讓步成本一起餵給評審,讓評分呼應勝負、不與結果矛盾。
+    cost_control_score 由後端公式算(穩定、可解釋),覆寫進報告;讓步成本也一併附上供前端顯示。
     """
+    budget = int(state["scenario"].get("cost_budget", 80) or 80)
+    cost_spent = int(state.get("cost_spent", 0) or 0)
     report = llm.judge_report(
         state["messages"],
         ending_type=state["ending_type"],
         anger_history=state.get("anger_history"),
         max_turns=state["max_turns"],
+        cost_spent=cost_spent,
+        cost_budget=budget,
     )
-    return {"report": report.model_dump()}
+    data = report.model_dump()
+    data["cost_control_score"] = _cost_control_score(cost_spent, budget)
+    data["cost_spent"] = cost_spent
+    data["cost_budget"] = budget
+    return {"report": data}

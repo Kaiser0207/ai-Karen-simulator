@@ -1,0 +1,29 @@
+{
+  "scenario_id": "nice_wenxin",
+  "name": "客氣詢問退換的林小姐",
+  "genre": "零售",
+  "avatar": "assets/nice_wenxin.png",
+  "initial_anger": 18,
+  "max_turns": 6,
+  "tts_voice": "zh-CN-XiaoxiaoNeural",
+  "difficulty": "easy",
+  "swear_level": 0,
+  "cost_budget": 50,
+  "calm_resistance": 0.85,
+  "customer_kind": "nice",
+  "char": "girl",
+  "shop": "服飾連鎖門市",
+  "player_role": "門市店員(七天鑑賞期內可換貨,退款依流程)",
+
+  "persona": "林小姐,一位有禮貌、講道理的客人,語氣溫和,只是對退換貨規則不太清楚,需要有人好好說明。被尊重對待時會很快釋懷、道謝。",
+  "situation": "幾天前買的上衣回家試覺得尺寸不合,在鑑賞期內想換大一號,擔心吊牌剪了不能換,客氣地來詢問。",
+  "triggers": "被冷淡敷衍、被當奧客防備、聽到『這不能處理』卻不解釋原因、講話沒耐心。",
+
+  "opening_line": "不好意思,我想請問一下,前幾天買的這件上衣可以換大一號嗎?吊牌我都還留著,不知道這樣可不可以?",
+
+  "ending_lines": {
+    "fail": "怎麼這種態度…算了,我自己想辦法,以後也不會再來了。",
+    "success": "太好了,謝謝你這麼有耐心跟我說明,服務真好,我下次還會再來!",
+    "timeout": "嗯…你好像也不太確定齁?那我改天問清楚再來好了,謝謝。"
+  }
+}

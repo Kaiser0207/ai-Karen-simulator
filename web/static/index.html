@@ -14,8 +14,9 @@
   <nav class="topnav">
     <div class="brand" data-view="select">Manager<span class="dot">!</span></div>
     <div class="navlinks">
-      <button class="navlink is-active" data-view="select"><i style="--c:#b692a1"></i>演練</button>
-      <button class="navlink" data-view="history"><i style="--c:#798e7b"></i>歷史紀錄</button>
+      <button class="navlink is-active" data-view="select"><i style="--c:#8ca2b4"></i>演練</button>
+      <button class="navlink" data-view="history"><i style="--c:#b692a1"></i>歷史紀錄</button>
+      <button class="navlink" data-action="settings"><i style="--c:#798e7b"></i>設定</button>
     </div>
   </nav>
 
@@ -44,29 +45,12 @@
       <aside class="game-side">
         <div class="okeke-card" id="okeke-card"></div>
         <div class="meter-card" id="meter-card"></div>
-        <details class="settings-fold">
-        <summary>⚙ 設定</summary>
-        <div class="timer-card">
-          <div class="voice-head">⏱ 壓力模式</div>
-          <label class="voice-row"><input type="checkbox" id="ts-on" /><span>回合倒數計時</span></label>
-          <div class="voice-slider" id="ts-sec-row">
-            <div class="voice-sliderlabel">每回合 <b id="ts-sec-val">30</b> 秒</div>
-            <input type="range" id="ts-sec" min="10" max="60" step="5" value="30" />
-          </div>
-          <div class="timer-track"><div class="timer-fill" id="timer-bar"></div></div>
-          <label class="voice-row"><input type="checkbox" id="ts-sfx" checked /><span>🔊 音效(憤怒爆表 / 倒數)</span></label>
+        <div class="hud-timer hidden" id="hud-timer">
+          <div class="hud-timer-top"><span>⏱ 回合倒數</span><b id="hud-timer-sec">30</b></div>
+          <div class="hud-timer-track"><div class="hud-timer-fill" id="hud-timer-fill"></div></div>
         </div>
-        <div class="voice-card">
-          <div class="voice-head">🎤 語音輸入</div>
-          <label class="voice-row"><input type="checkbox" id="vs-auto" checked /><span>靜音自動送出</span></label>
-          <div class="voice-slider" id="vs-sec-row">
-            <div class="voice-sliderlabel">靜音 <b id="vs-sec-val">2</b> 秒後自動送出</div>
-            <input type="range" id="vs-sec" min="1" max="15" step="1" value="2" />
-          </div>
-          <div class="voice-hint" id="vs-hint">關閉則改「按一下開始、再按一下結束」手動送出。</div>
-        </div>
-        </details>
-        <button id="quit" class="btn-ghost full">↩ 換一關</button>
+        <button id="reopen-report" class="btn-ghost full hidden">📋 班次總結</button>
+        <button id="quit" class="btn-ghost full">↩ 結束關卡</button>
       </aside>
       <main class="game-main">
         <div id="chat" class="chat"></div>
@@ -88,7 +72,7 @@
 
   <!-- ── 歷史回放(中等彈窗,與培訓報告同款)── -->
   <div id="hist-overlay" class="report-overlay hidden">
-    <div class="report-card" id="hist-card"></div>
+    <div class="report-frame"><div class="report-card" id="hist-card"></div></div>
   </div>
 
   <!-- ── Footer(深藍灰 + 蘭花粉字標)── -->
@@ -97,14 +81,46 @@
       <div class="footer-mark">奧客應對演練</div>
       <p class="footer-tag">是我的危機溝通訓練場</p>
       <span class="footer-rule"></span>
-      <p class="footer-desc">AI 即時情緒模擬 × 危機溝通訓練。設計語言改編自我的 CineRooms 影評日誌,版面取法 AKARU。</p>
-      <p class="footer-copy">© 2026 · Kaiser0207 · 為熱愛溝通的你練心打造</p>
+      <p class="footer-desc">AI 即時情緒模擬 × 危機溝通訓練。挑一種難度,在有限回合內安撫上門的奧客 —— 靠同理、設限與不踰矩的方案化解衝突,結束後由 AI 評審打分、給回饋。支援語音輸入與語氣辨識,連你「怎麼說」都會影響對方反應。</p>
+      <p class="footer-copy">© 2026 · Kaiser0207 · guenchen1 · 為熱愛跟奧客溝通的你練心打造</p>
     </div>
   </footer>
 
+  <!-- ── 設定(覆蓋層,nav「設定」隨時可開,關卡前後皆可調)── -->
+  <div id="settings-overlay" class="report-overlay hidden">
+    <div class="report-card settings-modal">
+      <div class="report-ending">⚙ 設定 · 隨時可調</div>
+      <div class="timer-card">
+        <div class="voice-head">⏱ 壓力模式</div>
+        <label class="voice-row"><input type="checkbox" id="ts-on" /><span>回合倒數計時</span></label>
+        <div class="voice-slider" id="ts-sec-row">
+          <div class="voice-sliderlabel">每回合 <b id="ts-sec-val">30</b> 秒</div>
+          <input type="range" id="ts-sec" min="10" max="60" step="5" value="30" />
+        </div>
+        <div class="timer-track"><div class="timer-fill" id="timer-bar"></div></div>
+        <label class="voice-row"><input type="checkbox" id="ts-sfx" checked /><span>🔊 音效(憤怒爆表 / 倒數)</span></label>
+        <label class="voice-row"><input type="checkbox" id="bgm-on" checked /><span>🎵 背景音樂</span></label>
+        <div class="voice-slider" id="bgm-vol-row">
+          <div class="voice-sliderlabel">音樂音量 <b id="bgm-vol-val">45</b>%</div>
+          <input type="range" id="bgm-vol" min="0" max="100" step="5" value="45" />
+        </div>
+      </div>
+      <div class="voice-card">
+        <div class="voice-head">🎤 語音輸入</div>
+        <label class="voice-row"><input type="checkbox" id="vs-auto" checked /><span>靜音自動送出</span></label>
+        <div class="voice-slider" id="vs-sec-row">
+          <div class="voice-sliderlabel">靜音 <b id="vs-sec-val">2</b> 秒後自動送出</div>
+          <input type="range" id="vs-sec" min="1" max="15" step="1" value="2" />
+        </div>
+        <div class="voice-hint" id="vs-hint">關閉則改「按一下開始、再按一下結束」手動送出。</div>
+      </div>
+      <div class="report-actions"><button class="btn-ghost" id="set-close">關閉</button></div>
+    </div>
+  </div>
+
   <!-- ── 評審報告(覆蓋層)── -->
   <div id="report" class="report-overlay hidden">
-    <div class="report-card" id="report-card"></div>
+    <div class="report-frame"><div class="report-card" id="report-card"></div></div>
   </div>
 
   <div id="toast" class="toast hidden"></div>

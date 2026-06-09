@@ -21,6 +21,8 @@ const diffStyle = (d) => DIFF_STYLE[d] || DIFF_STYLE.normal;
 
 // 情緒 → 立繪。優先用手繪圖(/characters/<前綴>_<角色>.png),沒有(或載入失敗)退回 emoji。
 const FACE = { angry: "😡", annoyed: "😠", neutral: "😐", calm: "🙂", happy: "😄" };
+// 玩家語氣(SER 4 類)→ 顯示;送給奧客大腦影響反應
+const TONE_LABEL = { Angry: "你的語氣:失控/不耐", Happy: "你的語氣:輕鬆有溫度", Neutral: "你的語氣:平穩", Anxious: "你的語氣:緊張/沒底氣" };
 const FACE_PREFIX = { angry: "ang", annoyed: "annoy", neutral: "neu", calm: "calm", happy: "hap" };
 const emotionForAnger = (a) => (a >= 80 ? "angry" : a >= 55 ? "annoyed" : a >= 30 ? "neutral" : a >= 10 ? "calm" : "happy");
 function setOkekeFace(emotion) {
@@ -37,6 +39,15 @@ function setOkekeFace(emotion) {
     f.textContent = FACE[emo] || "😐";
   }
   f.classList.remove("face-pop"); void f.offsetWidth; f.classList.add("face-pop");  // 重觸發動畫
+}
+// 開局先把這位角色的 5 張表情都預載進瀏覽器快取 → 換臉時瞬間切換,不再載入閃爍/卡頓
+function preloadFaces(ch) {
+  if (!ch) return;
+  ["ang", "annoy", "neu", "calm", "hap"].forEach((p) => { const im = new Image(); im.src = `/characters/${p}_${ch}.png`; });
+}
+// 空閒時把「全部角色 × 全部表情」都先載好 → 任何關卡開場、任何換臉都 0 延遲
+function preloadAllFaces() {
+  ["boy", "girl", "aunt", "uncle"].forEach((ch) => preloadFaces(ch));
 }
 
 // 音效:WebAudio 即時合成(免音檔)。憤怒爆表、怒氣飆升、倒數 tick、勝利。
@@ -61,6 +72,86 @@ const SFX = (() => {
   };
 })();
 
+// 背景音樂:寶可夢音檔(放專案 /music,後端 mount 到 /music)。
+//   戰鬥曲依「班次第幾位客人」切換(野生→訓練家→道館);和解播對應勝利曲一次;
+//   首頁/歷史循環大廳三曲;開設定/進歷史壓低音量並播 Healed。設定可整體關閉。
+// (瀏覽器自動播放限制:首次須使用者手勢才能出聲 → 見底部 unlockMusic。)
+const MUSIC = (() => {
+  let on = true, cur = null, key = null, vol = 0.45;
+  let duckS = false, duckV = false;   // 兩個獨立壓低來源:設定開啟、歷史頁;任一成立就壓低
+  const DUCK_RATIO = 0.12;   // 壓低時 = 主音量的 12%(隨音量滑桿一起縮放,不是固定值)
+  const ducked = () => duckS || duckV;
+  // 目前該播的背景音量:壓低時用「主音量 × DUCK_RATIO」,否則用該軌 base(預設=主音量)
+  const bgTarget = (base) => (ducked() ? vol * DUCK_RATIO : (base != null ? base : vol));
+  function applyDuck(ms) { if (cur && key !== "victory") fade(cur, bgTarget(cur._base || vol), ms || 250); }
+  const F = {   // 用 mp3(由原 wav 轉,~10x 小、載入快、瀏覽器通用)
+    battle:  ["Battle! (Wild Pokémon).mp3", "Battle! (Trainer Battle).mp3", "Battle! (Gym Leader Battle).mp3"],
+    victory: ["Victory! (Wild Pokémon).mp3", "Victory! (Trainer Battle).mp3", "Victory! (Gym Leader Battle).mp3"],
+    lobby:   ["Pokémon Center.mp3", "Pallet Town Theme.mp3", "Professor Oak's Laboratory.mp3"],
+    healed:  "Pokémon Healed.mp3",
+  };
+  const url = (f) => "/music/" + encodeURIComponent(f);
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const cache = {};
+  function getAudio(f) {   // 同檔重用同一個 <audio>(已 buffer)→ 再播放瞬間切、迴圈接得緊
+    let a = cache[f];
+    if (!a) { a = new Audio(url(f)); a.preload = "auto"; try { a.load(); } catch {} cache[f] = a; }
+    return a;
+  }
+  function preload(list) { (list || []).forEach(getAudio); }
+  function fade(a, to, ms, done) {
+    if (!a) { if (done) done(); return; }
+    if (a._fid) clearInterval(a._fid);
+    const from = a.volume, steps = Math.max(1, Math.round(ms / 40)); let i = 0;
+    a._fid = setInterval(() => {
+      i++; a.volume = clamp01(from + (to - from) * (i / steps));
+      if (i >= steps) { clearInterval(a._fid); a._fid = null; if (done) done(); }
+    }, 40);
+  }
+  function stopEl(a, ms) { if (a) fade(a, 0, ms || 400, () => { try { a.pause(); a.ontimeupdate = null; } catch {} }); }
+  function start(file, loop, baseVol, ms) {   // 切到單一曲(戰鬥/勝利):與舊曲交疊淡入淡出
+    const old = cur, a = getAudio(file);
+    a.loop = loop; a.onended = null; a.ontimeupdate = null; a._base = baseVol;
+    try { a.currentTime = 0; } catch {}
+    a.volume = 0; cur = a;
+    a.play().then(() => fade(a, bgTarget(baseVol), ms || 500)).catch(() => {});
+    if (old && old !== a) stopEl(old, 450);
+    return a;
+  }
+  function lobbyNext(prev) {   // 大廳:隨機(不連播同首),剩 ~1.6s 提前交疊換下一首 → 無縫接續
+    if (key !== "lobby") return;
+    let pool = F.lobby.filter((f) => f !== prev); if (!pool.length) pool = F.lobby;
+    const file = pool[Math.floor(Math.random() * pool.length)];
+    const old = cur, a = getAudio(file);
+    a.loop = false; a._base = vol; a._handing = false;
+    try { a.currentTime = 0; } catch {}
+    a.volume = 0; cur = a;
+    a.ontimeupdate = () => {
+      if (key !== "lobby" || cur !== a || a._handing) return;
+      if (a.duration && a.duration - a.currentTime <= 1.6) { a._handing = true; lobbyNext(file); }
+    };
+    a.onended = () => { if (key === "lobby" && cur === a) lobbyNext(file); };   // 後備
+    a.play().then(() => fade(a, bgTarget(vol), 700)).catch(() => {});
+    if (old && old !== a) stopEl(old, 1600);   // 與新曲交疊較長 → 聽得出 crossfade
+  }
+  const idx3 = (i) => Math.max(0, Math.min(2, i | 0));
+  return {
+    set(v) { on = v; if (!on) this.stop(); },
+    isOn() { return on; },
+    setVolume(v) { vol = clamp01(v); if (cur && key !== "victory") { cur._base = vol; fade(cur, vol, 100); } },   // 預覽:直接到 vol(忽略壓低)→ 在設定裡拖就聽得到
+    getVolume() { return vol; },
+    preloadLobby() { preload(F.lobby); },
+    preloadBattle() { preload(F.battle.concat(F.victory)); },   // 進關卡前先 buffer 整班戰鬥/勝利曲
+    lobby() { if (!on) { key = "lobby"; return; } if (key === "lobby" && cur && !cur.paused) return; key = "lobby"; lobbyNext(null); },
+    battle(i) { key = "battle"; if (!on) return; start(F.battle[idx3(i)], true, vol, 400); },
+    victory(i) { key = "victory"; if (!on) return; start(F.victory[idx3(i)], false, Math.min(1, vol + 0.12), 250); },
+    healed() { if (!on) return; try { const a = getAudio(F.healed); a.loop = false; a.volume = clamp01(bgTarget(vol) + vol * 0.35); try { a.currentTime = 0; } catch {} a.play().catch(() => {}); } catch {} },   // 跟主音量一起縮放,且固定高背景一截
+    duckSettings(d) { duckS = d; applyDuck(); },   // 設定開啟 → 壓低
+    duckView(d) { duckV = d; applyDuck(); },        // 歷史頁 → 壓低
+    stop() { key = null; const old = cur; cur = null; stopEl(old, 350); },
+  };
+})();
+
 let STATE = { thread: null, maxTurns: 8, busy: false, ended: false, anger: 0 };
 let SCENARIOS = [];          // /api/scenarios 快取(已依難度排序)
 let SHIFT = null;            // 班次:{ diff, queue:[scenario...], idx, results:[] }
@@ -68,9 +159,23 @@ let curBody = null;          // 目前客人的對話折疊區(addMessage 寫入
 
 // ---------- 共用 ----------
 async function api(path, opts) {
-  const res = await fetch(path, opts);
-  if (!res.ok) { let d = "請求失敗,請再試一次。"; try { d = (await res.json()).detail || d; } catch {} throw new Error(d); }
-  return res.json();
+  opts = opts || {};
+  let timer = null;
+  if (opts.timeoutMs) {                       // 逾時自動中止 → AI 卡住時 UI 不會永遠「思考中」
+    const ctrl = new AbortController();
+    timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
+    opts = { ...opts, signal: ctrl.signal };
+  }
+  try {
+    const res = await fetch(path, opts);
+    if (!res.ok) { let d = "請求失敗,請再試一次。"; try { d = (await res.json()).detail || d; } catch {} throw new Error(d); }
+    return await res.json();
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("回應逾時(AI 太久沒回應),請稍候再送一次。");
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 let toastTimer;
 function toast(msg) {
@@ -83,6 +188,9 @@ function showView(name) {
   document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
   $("#view-" + name).classList.remove("hidden");
   document.querySelectorAll(".navlink").forEach((l) => l.classList.toggle("is-active", l.dataset.view === name));
+  if (name === "select") { MUSIC.duckView(false); MUSIC.lobby(); }              // 首頁:大廳曲正常音量
+  else if (name === "history") { MUSIC.duckView(true); MUSIC.lobby(); MUSIC.healed(); }  // 歷史:大廳曲壓低(同設定背景大小)+ Healed
+  else if (name === "game") MUSIC.duckView(false);            // 戰鬥曲由 startCustomer 觸發,音量正常
 }
 
 // ---------- 選關卡(橫向場景)----------
@@ -270,22 +378,29 @@ function startShift(difficulty, fromId) {
   const side = document.querySelector(".game-side");
   if (side) side.style.setProperty("--lvl", diffStyle(difficulty).grad);
   SFX.resume();   // 開局點擊=使用者手勢,趁機解鎖 AudioContext
+  MUSIC.preloadBattle();   // 先 buffer 整班戰鬥/勝利曲 → 換客人時瞬間切、不延遲
   $("#chat").innerHTML = "";
   $("#report").classList.add("hidden");
+  syncReopenBtn();   // 新班次 results 為空 → 隱藏舊的捷徑
   showView("game");
   startCustomer();
 }
 
 async function startCustomer() {
   const meta = SHIFT.queue[SHIFT.idx];
+  const myShift = SHIFT;                       // 守衛:開場請求回來前若已離開此班次 → 丟棄,不污染新對局
   try {
     const d = await api("/api/start", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scenario_id: meta.scenario_id, shift_id: SHIFT.id,
         shift_index: SHIFT.idx, shift_total: SHIFT.queue.length, shift_diff: SHIFT.diff }),
+      timeoutMs: 45000,
     });
-    STATE = { thread: d.thread_id, maxTurns: d.max_turns, busy: false, ended: false, anger: d.anger,
+    if (SHIFT !== myShift) return;             // 已換關/已離開:整個丟棄
+    STATE = { thread: d.thread_id, maxTurns: d.max_turns, turn: d.turn || 0, busy: false, ended: false, anger: d.anger,
+      serverAnger: d.anger, penalty: 0,   // penalty:超時累積的怒氣懲罰(顯示用,疊加在 AI 給的怒氣上)
       costSpent: 0, costBudget: d.cost_budget || 80, char: d.scenario.char || "" };
+    preloadFaces(STATE.char);                             // 先預載 5 張表情 → 後續換臉不卡
     const ds = diffStyle(d.scenario.difficulty);          // 本關顏色以難度為準(藍簡/粉中/綠難)
     const emoji = styleFor(d.scenario.genre).emoji;
     const n = SHIFT.idx + 1, N = SHIFT.queue.length;
@@ -313,7 +428,9 @@ async function startCustomer() {
     $("#msg").disabled = false; $("#send").disabled = false; $("#mic").disabled = false;
     $("#msg").value = ""; $("#msg").focus();
     startTurnTimer();   // 換你回話 → 開始倒數
-  } catch (e) { toast(e.message); }
+    MUSIC.battle(SHIFT.idx);   // 戰鬥曲:第1位=野生、第2位=訓練家、第3位=道館
+    syncReopenBtn();    // 班次內已有完成的客人 → 側欄顯示「班次總結」捷徑
+  } catch (e) { if (SHIFT !== myShift) return; toast(e.message); }
 }
 
 function finishCustomer(d) {
@@ -341,6 +458,7 @@ function finishCustomer(d) {
     if (last) showShiftReport();
     else { SHIFT.idx += 1; startCustomer(); }
   };
+  syncReopenBtn();   // 已完成 ≥1 位 → 側欄常駐「班次總結」捷徑(關掉報告也能再開)
 }
 function updateMeter(anger, turn, maxTurns) {
   const budget = STATE.costBudget || 80, spent = STATE.costSpent || 0;
@@ -364,34 +482,41 @@ async function send() {
   if (STATE.busy || STATE.ended || !STATE.thread) return;
   const input = $("#msg"); const text = input.value.trim();
   if (!text) { toast("請先輸入你的回應。"); return; }
+  const myThread = STATE.thread;   // 守衛:中途離開/換關後,這個在途回應不可寫進新對局
+  const ve = STATE.voiceEmotion || null;   // 這句的語氣(語音才有;打字為 null)
   STATE.busy = true; stopTurnTimer(); input.disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
-  addMessage("user", text, "你"); input.value = "";
-  const thinking = addMessage("bot thinking", "⌛ 思考中…");
-  // 一般回合 ~7s;若超過,通常是這回合要結束、後台正在跑評審報告 → 換個說明,讓久等變得合理
-  const reportHint = setTimeout(() => { if (thinking.isConnected) thinking.textContent = "📝 整理評審報告中…(評審較花時間)"; }, 7000);
-  const prevAnger = STATE.anger;
+  const userNode = addMessage("user", text, "你"); input.value = "";
+  // 只在「這回合是最後一回合(結束會跑評審報告)」才顯示報告字樣,避免一般慢回合(如限流)誤判
+  const willEnd = (STATE.turn + 1) >= STATE.maxTurns;
+  const thinking = addMessage("bot thinking", willEnd ? "📝 整理評審報告中…(評審較花時間)" : "⌛ 思考中…");
+  const prevAnger = STATE.serverAnger != null ? STATE.serverAnger : STATE.anger;
   try {
     const d = await api("/api/say", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ thread_id: STATE.thread, text }),
+      body: JSON.stringify({ thread_id: myThread, text, voice_emotion: ve }), timeoutMs: 90000,
     });
-    clearTimeout(reportHint);
+    if (STATE.thread !== myThread) return;   // 已換關/已離開:整個丟棄,別寫進別人的對話
+    STATE.voiceEmotion = null;               // 這句語氣已用掉(送成功);下一句若用打字就不帶
     thinking.remove();
     addMessage("bot", d.ai_reply, "奧客");
     if (typeof d.cost_spent === "number") STATE.costSpent = d.cost_spent;
     if (typeof d.cost_budget === "number") STATE.costBudget = d.cost_budget;
-    updateMeter(d.anger, d.turn, d.max_turns);
-    setOkekeFace(d.emotion || emotionForAnger(d.anger));   // 立繪換臉
-    STATE.anger = d.anger;
+    const disp = Math.min(100, d.anger + (STATE.penalty || 0));   // 疊加超時懲罰後的顯示怒氣
+    updateMeter(disp, d.turn, d.max_turns);
+    setOkekeFace(emotionForAnger(disp));   // 立繪換臉:以怒氣為準(怒氣0=最開心),不靠 LLM 自報情緒
+    STATE.serverAnger = d.anger; STATE.anger = disp; STATE.turn = d.turn;
     if (d.anger - prevAnger >= 12) SFX.tension();           // 怒氣一回合飆 ≥12 → 緊張音
     if (d.ended) {
       STATE.ended = true; addMessage("bot", d.ending_line, "奧客");
-      if (d.ending_type === "success") SFX.win(); else SFX.buzzer();   // 和解=勝利音;砸店/逾時=爆表音
+      if (d.ending_type === "success") MUSIC.victory(SHIFT.idx);   // 和解 → 對應勝利曲一次
+      else { MUSIC.stop(); SFX.buzzer(); }                          // 砸店/逾時 → 停戰鬥曲 + 爆表音
       finishCustomer(d);   // 收尾本客人 → 「下一位 / 看班次總結」
     } else { STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; input.focus(); startTurnTimer(); }
   } catch (e) {
-    clearTimeout(reportHint);
-    thinking.remove(); toast(e.message);
+    if (STATE.thread !== myThread) return;   // 舊對局的逾時/錯誤,不要打擾新對局
+    // 這回合沒送成(伺服器端也沒推進)→ 把剛貼的「你」泡泡和思考泡泡都收回,文字還原到輸入框讓你重送。
+    // 不自動重啟倒數,避免「倒數到 → 自動再送 → 又失敗」無限疊泡泡。
+    thinking.remove(); if (userNode) userNode.remove(); toast(e.message);
     STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; input.value = text; input.focus();
   }
 }
@@ -460,6 +585,8 @@ function startTurnTimer() {
   timerDeadline = performance.now() + TIMER.sec * 1000;
   timerLastSec = -1;
   const bar = $("#timer-bar"), card = document.querySelector(".timer-card");
+  const hud = $("#hud-timer"), hudFill = $("#hud-timer-fill"), hudSec = $("#hud-timer-sec");
+  if (hud) hud.classList.remove("hidden");   // 遊戲中 HUD 顯示倒數(設定條在 modal,這裡是常駐 HUD)
   (function frame() {
     if (!TIMER.on || STATE.ended) { stopTurnTimer(); return; }
     const left = Math.max(0, timerDeadline - performance.now());
@@ -467,6 +594,9 @@ function startTurnTimer() {
     if (bar) { bar.style.width = (frac * 100).toFixed(1) + "%"; bar.classList.toggle("low", left <= 5000); }
     if (card) card.classList.toggle("warn", left <= 5000 && left > 0);
     const secLeft = Math.ceil(left / 1000);
+    if (hudFill) hudFill.style.width = (frac * 100).toFixed(1) + "%";
+    if (hudSec) hudSec.textContent = secLeft;
+    if (hud) hud.classList.toggle("low", left <= 5000 && left > 0);
     if (secLeft <= 5 && secLeft >= 1 && secLeft !== timerLastSec) { timerLastSec = secLeft; SFX.tick(); }  // 最後 5 秒每秒滴答
     if (left <= 0) { onTimerExpire(); return; }
     timerRAF = requestAnimationFrame(frame);
@@ -476,14 +606,25 @@ function stopTurnTimer() {
   if (timerRAF) { cancelAnimationFrame(timerRAF); timerRAF = null; }
   const bar = $("#timer-bar"); if (bar) { bar.style.width = "100%"; bar.classList.remove("low"); }
   document.querySelector(".timer-card")?.classList.remove("warn");
+  const hud = $("#hud-timer"); if (hud) { hud.classList.add("hidden"); hud.classList.remove("low"); }
 }
 function onTimerExpire() {
   stopTurnTimer();
   SFX.buzzer();
   const input = $("#msg"), text = (input.value || "").trim();
   if (text && !STATE.busy && !STATE.ended && STATE.thread) { send(); return; }  // 有打字 → 直接送出
-  toast("⏰ 時間到!快回應奧客!");                                              // 沒打字 → 催促 + 重新計時
-  if (!STATE.busy && !STATE.ended && STATE.thread) startTurnTimer();
+  // 沒打字 → 視為冷場,加怒氣懲罰(顯示用,疊加在 AI 怒氣上)+ 催促 + 重新計時
+  if (!STATE.busy && !STATE.ended && STATE.thread) {
+    STATE.penalty = (STATE.penalty || 0) + 10;
+    const disp = Math.min(100, (STATE.serverAnger != null ? STATE.serverAnger : STATE.anger) + STATE.penalty);
+    STATE.anger = disp;
+    updateMeter(disp, STATE.turn, STATE.maxTurns);
+    setOkekeFace(emotionForAnger(disp));
+    toast("⏰ 時間到!你乾在那發呆,顧客更火了(怒氣 +10)");
+    startTurnTimer();
+  } else {
+    toast("⏰ 時間到!快回應奧客!");
+  }
 }
 
 let mediaRec = null, recChunks = [], recording = false, silenceAudioCtx = null;
@@ -536,9 +677,13 @@ async function toggleMic() {
       const fd = new FormData(); fd.append("audio", blob, "rec.webm");
       const res = await fetch("/api/stt", { method: "POST", body: fd });
       if (!res.ok) { let m = "辨識失敗"; try { m = (await res.json()).detail || m; } catch {} throw new Error(m); }
-      text = (await res.json()).text || "";
-      if (text) input.value = (input.value ? input.value + " " : "") + text;
-      else toast("沒聽清楚,請再說一次。");
+      const d = await res.json();
+      text = d.text || "";
+      if (text) {
+        input.value = (input.value ? input.value + " " : "") + text;
+        STATE.voiceEmotion = d.emotion || null;        // 記住這句的語氣 → send() 帶給奧客
+        if (d.emotion && TONE_LABEL[d.emotion]) toast("🎙 " + TONE_LABEL[d.emotion]);   // 給玩家語氣回饋
+      } else toast("沒聽清楚,請再說一次。");
     } catch (e) { toast(e.message); }
     input.placeholder = ph;
     if (!STATE.ended && STATE.thread) mic.disabled = false;
@@ -560,10 +705,10 @@ const _scoreOf = (rep) => {
   return Math.round(dims.reduce((a, b) => a + b, 0) / dims.length);
 };
 function showShiftReport() {
-  stopTurnTimer();
+  stopTurnTimer(); MUSIC.stop();
   const rs = SHIFT.results, ds = diffStyle(SHIFT.diff);
   const metric = (label, v) => `
-    <div class="metric"><div class="metric-top"><span>${label}</span><b>${(v / 10).toFixed(1)}</b></div>
+    <div class="metric"><div class="metric-top"><span>${label}</span><b>${v}<small> /100</small></b></div>
       <div class="metric-bar"><div class="metric-fill" style="width:${v}%"></div></div></div>`;
   const li = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
   const scores = rs.map((r) => _scoreOf(r.report)).filter((x) => x != null);
@@ -582,12 +727,12 @@ function showShiftReport() {
       <div class="report-h">→ 可改進</div><ul class="report-list bad">${li(rep.bad_practices)}</ul>
       <div class="report-summary">${escapeHtml(rep.summary)}</div></div>` : "";
     return `<div class="srow-block ${r.ending_type} collapsed">
-      <button class="srow-head" type="button"><span>第 ${i + 1} 位 · ${escapeHtml(r.name)}</span><span class="srow-r">${r.ending_label || r.ending_type}${sc != null ? ` · ${(sc / 10).toFixed(1)}` : ""}</span></button>
+      <button class="srow-head" type="button"><span>第 ${i + 1} 位 · ${escapeHtml(r.name)}</span><span class="srow-r">${r.ending_label || r.ending_type}${sc != null ? ` · ${sc} 分` : ""}</span></button>
       ${detail}</div>`;
   }).join("");
   $("#report-card").innerHTML = `
     <div class="report-ending">班次總結 · ${ds.label}難度 · 共 ${rs.length} 位客人</div>
-    <div class="report-score">${(avg / 10).toFixed(1)}<small> / 10.0</small></div>
+    <div class="report-score">${avg}<small> / 100</small></div>
     <div class="report-title">平均表現</div>
     <div class="shift-stats">
       <div class="sstat"><b>${success}</b>滿意和解</div>
@@ -607,9 +752,16 @@ function showShiftReport() {
   $("#report-card").scrollTop = 0;
   $("#report-card").querySelectorAll(".srow-head").forEach((h) =>
     h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed")));
-  $("#r-again").onclick = () => { $("#report").classList.add("hidden"); SHIFT = null; showView("select"); };
-  $("#r-close").onclick = () => $("#report").classList.add("hidden");
-  $("#report").onclick = (e) => { if (e.target === $("#report")) $("#report").classList.add("hidden"); };
+  $("#r-again").onclick = () => { $("#report").classList.add("hidden"); SHIFT = null; curBody = null; showView("select"); syncReopenBtn(); };
+  $("#r-close").onclick = () => { $("#report").classList.add("hidden"); syncReopenBtn(); };
+  $("#report").onclick = (e) => { if (e.target === $("#report")) { $("#report").classList.add("hidden"); syncReopenBtn(); } };
+  syncReopenBtn();   // 報告開著時隱藏捷徑;關掉時(上面處理)再現
+}
+// 側欄「班次總結」捷徑:本班次有完成的客人、且報告沒開著 → 顯示;讓「關閉看對話」後還能再開
+function syncReopenBtn() {
+  const b = $("#reopen-report"); if (!b) return;
+  const show = !!(SHIFT && SHIFT.results && SHIFT.results.length && $("#report").classList.contains("hidden"));
+  b.classList.toggle("hidden", !show);
 }
 function trajectorySVG(hist) {
   if (!Array.isArray(hist) || hist.length < 2) return "";
@@ -651,21 +803,26 @@ async function loadHistory() {
         const ava = g.char
           ? `<img class="hrow-ava" src="/characters/neu_${g.char}.png" alt="" onerror="this.style.display='none'">`
           : `<span class="hrow-ava">${styleFor(g.scenario_name || "").emoji}</span>`;
+        const sc = typeof g.score === "number" ? g.score : "—";
         return `<button class="hrow" data-tid="${g.thread_id}">
           ${ava}
           <span class="hrow-name">${escapeHtml(g.scenario_name || "?")}</span>
           <span class="hrow-meta">${g.turns} 回合 · 怒 ${g.final_anger ?? "?"}</span>
           <span class="hrow-badge ${g.ending_type}">${g.ending_label || g.ending_type}</span>
+          <span class="hrow-score">${sc}</span>
         </button>`;
       }).join("");
+      // 班次總分:各客人分數平均(像遊戲,下拉前就先秀總分)
+      const gScores = grp.items.map((x) => x.score).filter((v) => typeof v === "number");
+      const gAvg = gScores.length ? Math.round(gScores.reduce((a, b) => a + b, 0) / gScores.length) : null;
       const single = grp.items.length === 1;
       const title = single ? escapeHtml(grp.items[0].scenario_name || "?")
                            : `${ds.label}難度班次 · ${grp.items.length} 位客人`;
       const card = el(`<div class="hgroup ${gi === 0 ? "" : "collapsed"}" style="--lvl:${ds.grad}">
         <button class="hgroup-head">
           <span class="hg-caret"></span>
-          <span class="hg-l"><span class="hg-title">${title}</span><span class="hg-sub">${date}</span></span>
-          <span class="hg-r">✓ ${c("success")}/${grp.items.length} 和解</span>
+          <span class="hg-l"><span class="hg-title">${title}</span><span class="hg-sub">${date} · ✓ ${c("success")}/${grp.items.length} 和解</span></span>
+          <span class="hg-r">${gAvg != null ? `<b class="hg-score">${gAvg}<small> /100</small></b>` : ""}</span>
         </button>
         <div class="hgroup-body">${rows}</div>
       </div>`);
@@ -682,7 +839,7 @@ async function viewHistory(threadId) {
       `<div class="msg ${m.role === "user" ? "user" : "bot"}"><span class="who">${m.role === "user" ? "你" : "奧客"}</span>${escapeHtml(m.content)}</div>`).join("");
     const r = d.report;
     const metric = (label, v) => `
-      <div class="metric"><div class="metric-top"><span>${label}</span><b>${(v / 10).toFixed(1)}</b></div>
+      <div class="metric"><div class="metric-top"><span>${label}</span><b>${v}<small> /100</small></b></div>
         <div class="metric-bar"><div class="metric-fill" style="width:${v}%"></div></div></div>`;
     const li = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
     const hasCost = r && typeof r.cost_control_score === "number";
@@ -720,7 +877,14 @@ async function viewHistory(threadId) {
 
 // ---------- 綁定 ----------
 document.querySelectorAll(".navlink").forEach((l) =>
-  l.addEventListener("click", () => { const v = l.dataset.view; showView(v); if (v === "history") loadHistory(); }));
+  l.addEventListener("click", () => {
+    if (l.dataset.action === "settings") { openSettings(); return; }   // 設定不是頁面,是隨時可開的覆蓋層
+    const v = l.dataset.view; showView(v); if (v === "history") loadHistory();
+  }));
+function openSettings() { $("#settings-overlay").classList.remove("hidden"); SFX.resume(); MUSIC.duckSettings(true); MUSIC.healed(); }  // 開設定:壓低背景樂 + Healed 一聲
+function closeSettings() { if ($("#settings-overlay").classList.contains("hidden")) return; $("#settings-overlay").classList.add("hidden"); MUSIC.duckSettings(false); }  // 關設定:解除「設定壓低」(若在歷史頁仍由 duckView 壓著)
+$("#set-close").addEventListener("click", closeSettings);
+$("#settings-overlay").addEventListener("click", (e) => { if (e.target === $("#settings-overlay")) closeSettings(); });
 $(".brand").addEventListener("click", () => showView("select"));
 $("#send").addEventListener("click", send);
 $("#mic").addEventListener("click", toggleMic);
@@ -731,20 +895,66 @@ $("#ts-on").addEventListener("change", saveTimerSettings);
 $("#ts-sec").addEventListener("input", saveTimerSettings);
 $("#ts-sfx").addEventListener("change", saveTimerSettings);
 loadTimerSettings();
+// 背景音樂開關(預設開;關了立即停,開了依目前畫面接著播)
+function loadBgmSetting() {
+  let on = true;
+  try { const v = localStorage.getItem("okeke_bgm"); if (v !== null) on = v === "1"; } catch {}
+  const cb = $("#bgm-on"); if (cb) cb.checked = on;
+  MUSIC.set(on);
+}
+function playForCurrentView() {
+  if (!$("#view-game").classList.contains("hidden") && SHIFT && STATE.thread && !STATE.ended) MUSIC.battle(SHIFT.idx);
+  else MUSIC.lobby();
+}
+function saveBgmSetting() {
+  const on = $("#bgm-on").checked; MUSIC.set(on);
+  try { localStorage.setItem("okeke_bgm", on ? "1" : "0"); } catch {}
+  if (on) playForCurrentView();
+}
+$("#bgm-on").addEventListener("change", saveBgmSetting);
+loadBgmSetting();
+// 音樂音量(設定可調;存 localStorage)
+function loadMusicVol() {
+  let v = 45;
+  try { const s = localStorage.getItem("okeke_bgm_vol"); if (s !== null) v = Math.max(0, Math.min(100, parseInt(s, 10) || 45)); } catch {}
+  const sl = $("#bgm-vol"); if (sl) { sl.value = v; sl.style.setProperty("--fill", v + "%"); }
+  const lab = $("#bgm-vol-val"); if (lab) lab.textContent = v;
+  MUSIC.setVolume(v / 100);
+}
+function saveMusicVol() {
+  const v = Math.max(0, Math.min(100, parseInt($("#bgm-vol").value, 10) || 45));
+  $("#bgm-vol-val").textContent = v;
+  $("#bgm-vol").style.setProperty("--fill", v + "%");
+  MUSIC.setVolume(v / 100);
+  try { localStorage.setItem("okeke_bgm_vol", String(v)); } catch {}
+}
+$("#bgm-vol").addEventListener("input", saveMusicVol);
+loadMusicVol();
+// 延到瀏覽器空閒再預載大廳曲 + 全部立繪 → 不擋首屏渲染,之後播放/換臉都瞬間(解一開始卡頓)
+(window.requestIdleCallback || ((cb) => setTimeout(cb, 800)))(() => { MUSIC.preloadLobby(); preloadAllFaces(); });
+// 瀏覽器禁止無手勢自動播放 → 第一次互動(點/鍵/滾)才啟動目前畫面的音樂
+let _musicUnlocked = false;
+function unlockMusic() { if (_musicUnlocked) return; _musicUnlocked = true; playForCurrentView(); }
+["pointerdown", "keydown", "wheel"].forEach((ev) => document.addEventListener(ev, unlockMusic, { once: true, passive: true }));
 $("#msg").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); if (!STATE.busy && !STATE.ended) send(); }
 });
-// 換一關:回選關卡並清掉本場狀態(避免殘留 thread 造成誤送到舊對局)
+$("#msg").addEventListener("input", () => { STATE.voiceEmotion = null; });   // 手動打字 → 清語音語氣(STT 程式填值不觸發 input)
+// 結束關卡 = 直接回首頁。thread 設 null → 任何在途回應被守衛丟棄,不污染下一關。
+// 想看「只完成部分客人」的總結,離開前點側欄「📋 班次總結」即可(不強制跳報告)。
 $("#quit").addEventListener("click", () => {
   stopTurnTimer();
-  STATE = { thread: null, maxTurns: 8, busy: false, ended: false, anger: 0 };
+  $("#msg").disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
+  STATE = { thread: null, maxTurns: 8, busy: false, ended: true, anger: 0 };
   SHIFT = null; curBody = null;
-  showView("select");
+  $("#report").classList.add("hidden");
+  showView("select"); syncReopenBtn();   // showView('select') 會切回大廳曲
 });
+$("#reopen-report").addEventListener("click", () => { if (SHIFT && SHIFT.results && SHIFT.results.length) showShiftReport(); });
 $("#history-refresh").addEventListener("click", loadHistory);
 // Esc 關閉評審報告 / 歷史回放覆蓋層
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { $("#report").classList.add("hidden"); $("#hist-overlay").classList.add("hidden"); }
+  if (e.key === "Escape") { $("#report").classList.add("hidden"); $("#hist-overlay").classList.add("hidden"); closeSettings(); syncReopenBtn(); }
 });
 
 loadScenarios();

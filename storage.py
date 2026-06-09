@@ -14,6 +14,17 @@ from pathlib import Path
 _LOG_DIR = Path(__file__).parent / "logs"
 
 
+def _report_score(report) -> int | None:
+    """報告四面向(有成本面向才算)平均 → 0~100 總分;與前端 _scoreOf 一致,給歷史頁顯示。"""
+    if not isinstance(report, dict):
+        return None
+    dims = [report.get("empathy_score"), report.get("crisis_score"), report.get("compliance_score")]
+    if isinstance(report.get("cost_control_score"), (int, float)):
+        dims.append(report["cost_control_score"])
+    dims = [d for d in dims if isinstance(d, (int, float))]
+    return round(sum(dims) / len(dims)) if dims else None
+
+
 def save_game(
     thread_id: str,
     scenario: dict,
@@ -70,6 +81,7 @@ def list_games() -> list[dict]:
             "ending_type": d.get("ending_type", "?"),
             "turns": d.get("turns", 0),
             "final_anger": d.get("final_anger"),
+            "score": _report_score(d.get("report")),   # 歷史頁顯示分數(像遊戲)
             "created_at": d.get("created_at", ""),
         })
     items.sort(key=lambda x: x["created_at"], reverse=True)

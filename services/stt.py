@@ -102,6 +102,38 @@ def transcribe(audio_path: str) -> str:
     return _to_traditional(text)
 
 
+def transcribe_full(audio_path: str):
+    """轉文字 + 詞級時間戳 + 解碼後的 16k 波形(給 SER 用,免再解一次 webm)。
+
+    回傳 (text, words, audio):
+      - text:繁體文字
+      - words:[{"start","end","word"}, ...](word_timestamps;供 SER 長語句依時間戳切段)
+      - audio:np.float32 @16k 單聲道(faster-whisper 解碼;轉成 PCM 丟給 SER 微服務)
+    解碼用 faster_whisper.decode_audio(底層 PyAV/ffmpeg),webm/opus 都能讀。
+    """
+    if not audio_path:
+        return "", [], None
+    try:
+        from faster_whisper import decode_audio
+    except Exception:  # 舊版位置
+        from faster_whisper.audio import decode_audio
+    audio = decode_audio(audio_path, sampling_rate=16000)   # np.float32 16k mono
+    segments, _ = _get_model().transcribe(
+        audio,
+        language=config.STT_LANGUAGE,
+        initial_prompt=config.STT_PROMPT or None,
+        vad_filter=True,
+        word_timestamps=True,
+    )
+    parts, words = [], []
+    for seg in segments:
+        parts.append(seg.text)
+        for w in (seg.words or []):
+            words.append({"start": float(w.start), "end": float(w.end), "word": w.word})
+    text = _to_traditional("".join(parts).strip())
+    return text, words, audio
+
+
 def warmup() -> bool:
     """預先把模型載到裝置並跑一次空音訊暖機(初始化 CUDA kernel)。
 

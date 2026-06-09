@@ -30,7 +30,7 @@ import config
 import storage
 from graph.build import build_graph
 from scenarios import loader
-from services import stt
+from services import ser_client, stt
 
 # 建一次圖。多執行緒下 SQLite 連線需 check_same_thread=False;
 # 加 timeout(被鎖時最多等 30s 而非立刻拋 "database is locked")+ WAL(讀寫併發較友善)。
@@ -147,6 +147,7 @@ class StartReq(BaseModel):
 class SayReq(BaseModel):
     thread_id: str
     text: str
+    voice_emotion: str | None = None   # 玩家語氣(SER;前端語音輸入帶上,打字則 None)
 
 
 @app.get("/api/scenarios")
@@ -212,6 +213,7 @@ def api_say(req: SayReq):
         raise HTTPException(404, "工作階段不存在或已結束,請重新開始一場。")
 
     payload = {**sess["init"], "player_input": text} if sess["first"] else {"player_input": text}
+    payload["voice_emotion"] = req.voice_emotion   # 本回合語氣(None=打字,不影響)
     try:
         result = _invoke_with_retry(payload, {"configurable": {"thread_id": req.thread_id}})
     except Exception as err:  # noqa: BLE001
@@ -284,7 +286,7 @@ async def api_stt(audio: UploadFile = File(...)):
     try:
         tmp.write(data)
         tmp.close()
-        text = await run_in_threadpool(stt.transcribe, tmp.name)  # 不擋事件迴圈
+        text, words, audio16 = await run_in_threadpool(stt.transcribe_full, tmp.name)  # 不擋事件迴圈
     except Exception:  # noqa: BLE001
         raise HTTPException(503, "語音辨識失敗,請改用打字或再錄一次。")
     finally:
@@ -292,7 +294,14 @@ async def api_stt(audio: UploadFile = File(...)):
             os.unlink(tmp.name)
         except OSError:
             pass
-    return {"text": text}
+    resp = {"text": text}
+    # 語氣辨識(best-effort:SER 服務沒開/逾時/失敗就略過,純文字照常跑)
+    if config.SER_URL and text and audio16 is not None:
+        emo = await run_in_threadpool(ser_client.voice_emotion, audio16, text, words)
+        if emo and emo.get("label"):
+            resp["emotion"] = emo["label"]
+            resp["emotion_probs"] = emo.get("probs")
+    return resp
 
 
 @app.get("/api/history/{thread_id}")
@@ -303,6 +312,11 @@ def api_history_one(thread_id: str):
     d["ending_label"] = ENDING_LABEL.get(d.get("ending_type"), d.get("ending_type"))
     return d
 
+
+# 背景音樂:寶可夢音檔放專案根目錄的 music/(.wav)。掛在 "/" catch-all 之前才不會被蓋掉。
+_MUSIC = Path(__file__).parent.parent / "music"
+if _MUSIC.is_dir():
+    app.mount("/music", StaticFiles(directory=str(_MUSIC)), name="music")
 
 # 靜態前端(放最後 mount,/api 路由優先比對,不會被蓋掉)
 _STATIC = Path(__file__).parent / "static"

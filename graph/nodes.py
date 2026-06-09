@@ -22,6 +22,7 @@ def customer_brain(state: GameState) -> dict:
         anger=state["anger"],
         messages=state["messages"],
         player_input=state["player_input"],
+        voice_emotion=state.get("voice_emotion"),
     )
     return {
         "ai_reply": turn.reply,

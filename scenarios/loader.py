@@ -49,18 +49,35 @@ _SWEAR_TONE = {
 }
 
 
+# 友善客人(customer_kind=nice)覆蓋:骨架模板是為「奧客」寫的(ended 只在「完美方案解決客訴」才 true),
+# 套到好客人身上 → 永遠不會和解 → 每場必超時。這段把成功條件改成「被好好招待就滿意」。
+_NICE_OVERRIDE = (
+    "【重要:你其實是友善的好客人,不是奧客】\n"
+    "你本質上有禮貌、講道理、不是來找碴的 —— 你只是有個小需求或想被當熟客好好對待。請據此調整:\n"
+    "- ended=true 的條件改成:店員『親切、有耐心、給了實用又貼心的協助/建議』讓你滿意即可,"
+    "不需要免單/退費那種大讓步。\n"
+    "- 一旦店員態度好、你的需求被妥善回應,就大方表達滿意並 ended=true,別硬拖到回合用盡。\n"
+    "- 只有被冷淡、敷衍、推薦得很隨便、不被當一回事時,anger 才上升;正常友善互動 anger 應緩降。\n"
+    "- 不要每回合重複問同一件事(例如一直問有沒有優惠);店員回應後就往下走、做出決定。"
+)
+
+
 def _build_system_prompt(scenario: dict) -> str:
     """用角色變數填充共用骨架模板,並依 swear_level 附上語氣強度指引。
 
     用 str.replace 而非 str.format —— 模板裡含有 {anger}/JSON 範例之類的大括號時,
     format() 會崩潰(這是設計階段踩過的雷)。
+    customer_kind=nice 時附加「好客人」覆蓋,修正好客人永遠無法和解→必超時的問題。
     """
     template = _load_template()
     for key in ("persona", "situation", "triggers"):
         template = template.replace("{" + key + "}", scenario.get(key, ""))
     level = int(scenario.get("swear_level", 1) or 0)
     tone = _SWEAR_TONE.get(level, _SWEAR_TONE[1])
-    return template + f"\n\n【語氣強度】{tone}"
+    out = template + f"\n\n【語氣強度】{tone}"
+    if scenario.get("customer_kind") == "nice":
+        out += "\n\n" + _NICE_OVERRIDE
+    return out
 
 
 def list_scenarios() -> list[dict]:
@@ -94,6 +111,7 @@ def load(scenario_id: str) -> dict:
         "turn": 0,
         "messages": [AIMessage(scenario["opening_line"])],
         "player_input": "",
+        "voice_emotion": None,
         "ai_reply": "",
         "anger_change": 0,
         "emotion": "annoyed",

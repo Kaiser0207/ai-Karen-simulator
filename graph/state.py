@@ -26,6 +26,7 @@ class GameState(TypedDict):
 
     # --- 本回合 I/O ---
     player_input: str  # 本回合玩家文字(STT 後 / 直接打字)
+    voice_emotion: Optional[str]  # 本回合玩家「語氣」情緒(SER:Angry/Happy/Neutral/Anxious;打字回合為 None)
     ai_reply: str  # 本回合奧客台詞
     anger_change: int  # 本回合憤怒變化量(供前端動畫)
     emotion: str  # 本回合情緒標籤(供前端換立繪 / 將來 TTS)

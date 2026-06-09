@@ -23,6 +23,10 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 CUSTOMER_MODEL = os.getenv("CUSTOMER_MODEL", "llama-3.3-70b-versatile")
 JUDGE_MODEL = os.getenv("JUDGE_MODEL", "llama-3.3-70b-versatile")
 
+# Gemini 2.5「思考預算」:0=關閉 reasoning(扮演奧客不需推理 → 延遲大幅下降、也省 token);
+# 想讓評審多想一點可設 >0(僅 gemini 供應商有效)。
+GEMINI_THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
+
 # STT(faster-whisper)語音輸入設定
 STT_MODEL = os.getenv("STT_MODEL", "medium")  # tiny/base/small/medium/large-v3
 STT_DEVICE = os.getenv("STT_DEVICE", "cpu")  # cpu 或 cuda

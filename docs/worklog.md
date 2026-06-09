@@ -128,6 +128,12 @@
   錄音時用 Web Audio `AnalyserNode` 量 RMS:偵測到說話後、連續靜音超過設定秒數 → 自動 `stop()` → 辨識 → 自動 `send()`;
   關閉自動則回手動(按一下開始、再按一下■結束,文字填輸入框讓使用者檢查再送)。手動■在自動模式=提早結束。
 
+### 2026-06-09 關閉 Gemini thinking → 回應從 ~60s 降到 ~7.6s
+- 症狀:真實 `gemini-2.5-flash` 一回合要 ~1 分鐘。主因:2.5 預設開 reasoning(thinking),扮演奧客根本不需要。
+- 解法:`config.GEMINI_THINKING_BUDGET`(預設 0=關),`_get_chat` 的 gemini 分支傳 `thinking_budget=`;
+  langchain-google-genai 有 `thinking_budget` 欄位。實測同一句 60s → **7.6s**,品質/語意不變,也省 thinking token。
+- 想更快(同等品質):`CUSTOMER_MODEL=gemini-2.5-flash-lite` 或 `gemini-2.0-flash`(.env 改即可)。
+
 ### 後端分析待辦(2026-06-09 盤點,前端穩定後再做)
 高優先:
 - `graph/nodes.py:50` **anger<=0 自動判 success** 違反設計(該由 LLM `ended` 決定)→ 修掉血條自動結束。

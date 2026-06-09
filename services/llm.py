@@ -234,8 +234,10 @@ def _get_chat(model: str, temperature: float):
 
         if not config.GOOGLE_API_KEY:
             raise RuntimeError("缺少 GOOGLE_API_KEY,請在 .env 填入 AI Studio 的 key。")
+        # thinking_budget=0 關閉 2.5 的 reasoning → 扮演奧客快很多、品質不變(僅 2.5 系列有效)
         return ChatGoogleGenerativeAI(
-            model=model, google_api_key=config.GOOGLE_API_KEY, temperature=temperature
+            model=model, google_api_key=config.GOOGLE_API_KEY, temperature=temperature,
+            thinking_budget=config.GEMINI_THINKING_BUDGET,
         )
     if provider == "groq":
         from langchain_groq import ChatGroq  # 需 uv add langchain-groq

@@ -190,8 +190,11 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .voice-head { font-family: var(--f-head); font-weight: 800; font-size: .95rem; }
 .voice-row { display: flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--muted); }
 .voice-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--red); cursor: pointer; }
-.voice-row input[type="number"] { width: 52px; font-family: var(--f-mono); font-size: .9rem; text-align: center;
-  border: 1px solid var(--border-2); border-radius: 8px; padding: 4px 6px; background: var(--card); color: var(--ink); }
+.voice-slider { display: flex; flex-direction: column; gap: 7px; }
+.voice-sliderlabel { font-size: .9rem; color: var(--muted); }
+.voice-sliderlabel b { font-family: var(--f-num); font-size: 1.05rem; color: var(--ink); letter-spacing: .03em; }
+.voice-slider input[type="range"] { width: 100%; accent-color: var(--red); cursor: pointer; }
+.voice-slider input[type="range"]:disabled { cursor: not-allowed; }
 .voice-hint { font-size: .78rem; color: var(--dim); line-height: 1.4; }
 
 /* ── 評審報告 ── */

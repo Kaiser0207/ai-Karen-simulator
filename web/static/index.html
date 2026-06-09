@@ -47,7 +47,10 @@
         <div class="voice-card">
           <div class="voice-head">🎤 語音輸入</div>
           <label class="voice-row"><input type="checkbox" id="vs-auto" checked /><span>靜音自動送出</span></label>
-          <div class="voice-row" id="vs-sec-row">靜音 <input type="number" id="vs-sec" min="1" max="15" step="1" value="4" /> 秒後自動送出</div>
+          <div class="voice-slider" id="vs-sec-row">
+            <div class="voice-sliderlabel">靜音 <b id="vs-sec-val">4</b> 秒後自動送出</div>
+            <input type="range" id="vs-sec" min="1" max="15" step="1" value="4" />
+          </div>
           <div class="voice-hint" id="vs-hint">關閉則改「按一下開始、再按一下結束」手動送出。</div>
         </div>
         <button id="quit" class="btn-ghost full">↩ 換一關</button>

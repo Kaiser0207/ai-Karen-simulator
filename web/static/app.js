@@ -244,12 +244,12 @@ function loadVoiceSettings() {
   try { const s = JSON.parse(localStorage.getItem("okeke_voice") || "{}");
     if (typeof s.auto === "boolean") VOICE.auto = s.auto;
     if (s.sec) VOICE.sec = Math.max(1, Math.min(15, s.sec)); } catch {}
-  $("#vs-auto").checked = VOICE.auto; $("#vs-sec").value = VOICE.sec; updateVoiceUI();
+  $("#vs-auto").checked = VOICE.auto; $("#vs-sec").value = VOICE.sec; $("#vs-sec-val").textContent = VOICE.sec; updateVoiceUI();
 }
 function saveVoiceSettings() {
   VOICE.auto = $("#vs-auto").checked;
   VOICE.sec = Math.max(1, Math.min(15, parseInt($("#vs-sec").value, 10) || 4));
-  $("#vs-sec").value = VOICE.sec;
+  $("#vs-sec-val").textContent = VOICE.sec;
   try { localStorage.setItem("okeke_voice", JSON.stringify(VOICE)); } catch {}
   updateVoiceUI();
 }
@@ -417,7 +417,7 @@ $(".brand").addEventListener("click", () => showView("select"));
 $("#send").addEventListener("click", send);
 $("#mic").addEventListener("click", toggleMic);
 $("#vs-auto").addEventListener("change", saveVoiceSettings);
-$("#vs-sec").addEventListener("change", saveVoiceSettings);
+$("#vs-sec").addEventListener("input", saveVoiceSettings);   // 拖拉即時更新秒數
 loadVoiceSettings();
 $("#msg").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); if (!STATE.busy && !STATE.ended) send(); }

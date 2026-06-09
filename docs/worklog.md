@@ -124,6 +124,9 @@
 - **標點符號**(medium 常漏):`stt.transcribe` 加 `initial_prompt`(含標點的引導句,`config.STT_PROMPT`)+ `vad_filter=True`;
   引導句本身帶標點 → Whisper 延續風格把標點補出來。大模型(large-v3)效果最佳(本機 RTX 3090/24GB 跑 large-v3 float16 僅約 5GB,綽綽有餘)。
 - 驗證:`/api/stt` 回 200(sine 測試音→空字串正確);GPU 用量 11→2243MiB 確認走 cuda;pytest 25 passed。
+- **靜音自動送出 + 左側可調設定**:`VOICE={auto,sec}` 存 localStorage;左面板加「語音輸入」卡(勾選自動 + 秒數 1–15)。
+  錄音時用 Web Audio `AnalyserNode` 量 RMS:偵測到說話後、連續靜音超過設定秒數 → 自動 `stop()` → 辨識 → 自動 `send()`;
+  關閉自動則回手動(按一下開始、再按一下■結束,文字填輸入框讓使用者檢查再送)。手動■在自動模式=提早結束。
 
 ### 後端分析待辦(2026-06-09 盤點,前端穩定後再做)
 高優先:

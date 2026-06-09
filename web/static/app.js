@@ -238,10 +238,61 @@ async function send() {
 }
 
 // ---------- 語音輸入(MediaRecorder → /api/stt → 填進輸入框)----------
-let mediaRec = null, recChunks = [], recording = false;
+// 設定:auto=靜音自動送出、sec=靜音幾秒;存 localStorage,左側面板可調。
+const VOICE = { auto: true, sec: 4 };
+function loadVoiceSettings() {
+  try { const s = JSON.parse(localStorage.getItem("okeke_voice") || "{}");
+    if (typeof s.auto === "boolean") VOICE.auto = s.auto;
+    if (s.sec) VOICE.sec = Math.max(1, Math.min(15, s.sec)); } catch {}
+  $("#vs-auto").checked = VOICE.auto; $("#vs-sec").value = VOICE.sec; updateVoiceUI();
+}
+function saveVoiceSettings() {
+  VOICE.auto = $("#vs-auto").checked;
+  VOICE.sec = Math.max(1, Math.min(15, parseInt($("#vs-sec").value, 10) || 4));
+  $("#vs-sec").value = VOICE.sec;
+  try { localStorage.setItem("okeke_voice", JSON.stringify(VOICE)); } catch {}
+  updateVoiceUI();
+}
+function updateVoiceUI() {
+  $("#vs-sec-row").style.opacity = VOICE.auto ? "1" : ".4";
+  $("#vs-sec").disabled = !VOICE.auto;
+  $("#vs-hint").textContent = VOICE.auto
+    ? `說完停頓 ${VOICE.sec} 秒就自動辨識並送出;也可按一下■提早結束。`
+    : "手動模式:按一下開始、再按一下結束,文字會填到輸入框讓你檢查再送。";
+  const m = $("#mic"); if (m) m.title = VOICE.auto ? `按一下開始;靜音 ${VOICE.sec} 秒自動送出` : "按一下開始錄音,再按一下結束";
+}
+
+let mediaRec = null, recChunks = [], recording = false, silenceAudioCtx = null;
+// 偵測靜音:用 Web Audio 量 RMS 音量,偵測到說話後、若連續靜音超過設定秒數 → 自動停止(觸發送出)
+function startSilenceMonitor(stream) {
+  let ctx;
+  try { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+  catch { return; }
+  silenceAudioCtx = ctx;
+  const src = ctx.createMediaStreamSource(stream);
+  const analyser = ctx.createAnalyser(); analyser.fftSize = 512;
+  src.connect(analyser);
+  const buf = new Uint8Array(analyser.fftSize);
+  const THRESH = 0.02;                 // RMS 門檻(0~1):高於=有人說話
+  let spoke = false, lastSound = performance.now();
+  const closeCtx = () => { try { ctx.close(); } catch {} if (silenceAudioCtx === ctx) silenceAudioCtx = null; };
+  (function tick() {
+    if (!recording || silenceAudioCtx !== ctx) { closeCtx(); return; }
+    analyser.getByteTimeDomainData(buf);
+    let sum = 0; for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+    const rms = Math.sqrt(sum / buf.length), now = performance.now();
+    if (rms > THRESH) { spoke = true; lastSound = now; }
+    if (spoke && now - lastSound > VOICE.sec * 1000) {   // 說過話 + 靜音夠久 → 收尾
+      try { mediaRec && mediaRec.stop(); } catch {}
+      closeCtx(); return;
+    }
+    requestAnimationFrame(tick);
+  })();
+}
+
 async function toggleMic() {
   const mic = $("#mic");
-  if (recording) { try { mediaRec && mediaRec.stop(); } catch {} return; }
+  if (recording) { try { mediaRec && mediaRec.stop(); } catch {} return; }   // 第二下=手動結束
   if (STATE.busy || STATE.ended || !STATE.thread) return;
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
@@ -256,19 +307,24 @@ async function toggleMic() {
     if (!blob.size) return;
     const input = $("#msg"), ph = input.placeholder;
     mic.disabled = true; input.placeholder = "辨識中…";
+    let text = "";
     try {
       const fd = new FormData(); fd.append("audio", blob, "rec.webm");
       const res = await fetch("/api/stt", { method: "POST", body: fd });
       if (!res.ok) { let m = "辨識失敗"; try { m = (await res.json()).detail || m; } catch {} throw new Error(m); }
-      const { text } = await res.json();
-      if (text) { input.value = (input.value ? input.value + " " : "") + text; }
-      else { toast("沒聽清楚,請再說一次。"); }
-      input.focus();
+      text = (await res.json()).text || "";
+      if (text) input.value = (input.value ? input.value + " " : "") + text;
+      else toast("沒聽清楚,請再說一次。");
     } catch (e) { toast(e.message); }
-    finally { input.placeholder = ph; if (!STATE.ended && STATE.thread) mic.disabled = false; }
+    input.placeholder = ph;
+    if (!STATE.ended && STATE.thread) mic.disabled = false;
+    // 自動模式且有辨識到內容 → 直接送出;否則留給使用者檢查
+    if (text && VOICE.auto && !STATE.busy && !STATE.ended && STATE.thread) send();
+    else input.focus();
   };
   mediaRec.start();
   recording = true; mic.classList.add("recording"); mic.textContent = "■";
+  if (VOICE.auto) startSilenceMonitor(stream);
 }
 
 // ---------- 報告 ----------
@@ -360,6 +416,9 @@ document.querySelectorAll(".navlink").forEach((l) =>
 $(".brand").addEventListener("click", () => showView("select"));
 $("#send").addEventListener("click", send);
 $("#mic").addEventListener("click", toggleMic);
+$("#vs-auto").addEventListener("change", saveVoiceSettings);
+$("#vs-sec").addEventListener("change", saveVoiceSettings);
+loadVoiceSettings();
 $("#msg").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); if (!STATE.busy && !STATE.ended) send(); }
 });

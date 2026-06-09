@@ -236,3 +236,50 @@
 - 標語 `.s-genre`(低怒氣・好安撫…)改包 `.rev` → 休息態藏起、聚焦才逐字上滑(與下方大名同機制);藥丸樣式移到內層 `span` 避免露空殼。
 - 驗:`node -c` OK、`pytest 32 passed`、8 關 JSON 欄位齊全、4×5 立繪齊、靜態檔即時生效。
 - 另記:`localhost:8000` 黑畫面 = IPv6(`::1`)解析坑,改 `127.0.0.1:8000` 解(詳見除錯筆記)。
+
+## 2026-06-09(晚)~ 06-10(branch `feat/web-stt`)
+
+### UI 大改:設定移上方、HUD 倒數、結束關卡、歷史分組
+- **設定移到頂部 nav**(演練藍/歷史粉/設定綠三彩點),設定變**隨時可開的覆蓋層**(關卡前中後皆可調),壓力模式 + 語音輸入收進去。
+- **HUD 回合倒數**常駐側欄(秒數 + 進度條,用難度色,最後 5 秒變紅閃 + 滴答);設定條留在設定 modal。
+- 「換一關」→ **「結束關卡」**,直接回首頁、清乾淨狀態。
+- **報告精簡**:judge prompt 限 good/bad 各 ≤3 點、每點 ≤30 字、summary ≤40 字。
+- **歷史頁分組**:同一班次的客人聚成一張可摺疊卡(難度色 + 立繪頭像 + 結果徽章 + 班次平均分);舊紀錄各自單筆。
+- **報告/歷史卷軸 + 分數條用難度色**;聊天框拉高、側欄精簡。
+
+### 對話流程硬化(async 競態 / 卡死 / 跳針)
+- **換關殘留亂入**:離開/換關時舊 `/api/say` 回來會污染新對局 → 加 **thread 守衛**(回應回來時 thread 已變就整個丟棄)。
+- **「思考中」卡死**:`/api/say` 90s、`/api/start` 45s **client 逾時**(AbortController),逾時友善提示 + 還原輸入。
+- **重複「你」泡泡 + 自動重送迴圈**:送失敗收回泡泡、不自動重啟倒數(根因見除錯筆記)。
+- **跳針**:奧客 prompt 加「絕不重複、每則推進對話」硬指令(Groq llama 比 Gemini 易繞圈)。
+- **超時懲罰**:倒數歸零沒打字 → 顯示端怒氣 +10(疊在 AI 怒氣上、跨回合累積)、變臉、催促。
+
+### 好客人必超時修正(找到根因)
+- `customer_kind:"nice"` 一直被忽略 → 好客人套到奧客 prompt(只有「完美方案解客訴」才 `ended`)→ 永遠無法和解、每場必超時。
+- `loader._build_system_prompt` 依 `customer_kind` 附加 **nice 覆蓋**:被親切招待/給好建議就 `ended=success`、不硬拖、不重複問。
+
+### 立繪表情 / 報告 / 卷軸 細修
+- 立繪表情改**完全以怒氣決定**(`emotionForAnger`,怒氣0=最開心),不再用 LLM 自報情緒(常亂報)。立繪放大 124→152px。
+- 分數全改 **0~100**(報告大分、四面向、歷史);分數字放大。
+- 報告卷軸戳邊:改**外層 `.report-frame`(圓角 + `overflow:hidden` + `translateZ` GPU 合成)裁切、內層才捲動**,物理上不戳出 + 捲動順;滑塊離圓角 16px。
+
+### LLM 供應商:Gemini ↔ Groq
+- Gemini 免費層 RPM 連續壓測狂 429(成功率 ~24%)→ 測試切 **Groq**(`llama-3.3-70b-versatile`,~2s、額度大);最終 demo 再切回 Gemini。切換 = `LLM_PROVIDER` + `CUSTOMER_MODEL`/`JUDGE_MODEL` 三行(`config` 讀單值,模型名要一起改)。
+- 撞額度的友善 toast(`_friendly_error`)已驗:回「AI 服務暫時達到使用上限…」而非沉默台詞。
+
+### 寶可夢背景音樂系統
+- 後端 `app.mount("/music")` 直接服務專案根 `music/`(不搬檔)。前端 `MUSIC` 模組(HTML5 Audio,快取重用 + 預載 + crossfade)。
+- **首頁/歷史**大廳三曲隨機循環(剩 1.6s 提前交疊 → 無縫);**戰鬥曲依班次第幾位**(野生/訓練家/道館);**和解**播對應勝利曲;**進歷史/開設定**壓低背景 + Healed 一聲。
+- 設定加**音量滑桿**;壓低 = 主音量 × 12%(隨滑桿縮放);Healed = 背景 + 主音量×35%(跟著縮放、固定高一截)。兩個壓低來源(設定/歷史)獨立可疊加。
+- **載入優化**:WAV(125MB)→ **MP3(12MB,ffmpeg `-q:a 4`)**,`music/*.wav` gitignore;大廳曲 + 全立繪改 `requestIdleCallback` 預載(不擋首屏)。
+
+### 語音情緒(SER)接進遊戲 — 獨立微服務
+- **推論封裝** `Crab/api/okeke_infer.py`(`OkekeSER`):base XLS-R-300M + `PeftModel(audio_lora_adapter)`、base XLM-R-large + `PeftModel(text_lora_adapter)`、`final_ser.pt`(4 類)、波形 `train_norm_stat` 正規化。驗:test 48 clip acc 0.50(random 0.25)、Angry recall 強、Anxious↔Neutral 混 → 與訓練一致。
+- **斷句演算法** `split_long_sentence`(玩家給的:句末標點 > 子句標點≥25% > 等時平衡),長語句切段、`predict_chunked` 依段長加權平均(已單元測)。
+- **微服務** `Crab/api/ser_service.py`(FastAPI;`/health`、`/predict`(檔)、`/predict_pcm`(JSON base64))跑在 `Crab/.venv`,遊戲用 HTTP 呼叫、零依賴衝突。
+- **遊戲串接**:`stt.transcribe_full`(`faster_whisper.decode_audio` 解碼一次 → text + 詞級時間戳 + 16k 波形)→ `ser_client`(stdlib urllib 送 PCM base64)→ `/api/stt` 回 `{text, emotion}`(`SER_URL` 沒開就略過、純文字照跑)。
+- **語氣影響奧客**:`voice_emotion` 經 `/api/say`→state→`llm._voice_note` 注入 prompt(Happy 安撫加成 / Neutral 照舊 / Anxious 稍打折 / Angry 砍半甚至轉正)。前端 STT 拿語氣存 `STATE.voiceEmotion`、send 帶上、打字清掉、toast 顯示。
+- **限制**:模型英文 MSP 訓練,中文玩家屬 OOD(音訊靠 XLS-R 跨語言遷移、文字分支弱)→ 之後混 EmotionTalk(ZH)做雙語。
+
+### Footer 文案
+- 介紹加長(帶到語音/語氣賣點)、刪 CineRooms/AKARU 句、版權加 `guenchen1`、改「為熱愛跟奧客溝通的你練心打造」。

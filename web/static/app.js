@@ -196,7 +196,8 @@ async function startGame(scenarioId) {
     updateMeter(d.anger, d.turn, d.max_turns);
     $("#chat").innerHTML = "";
     addMessage("bot", d.opening_line, d.scenario.name);
-    $("#msg").disabled = false; $("#send").disabled = false; $("#msg").value = ""; $("#msg").focus();
+    $("#msg").disabled = false; $("#send").disabled = false; $("#mic").disabled = false;
+    $("#msg").value = ""; $("#msg").focus();
     $("#report").classList.add("hidden");
     showView("game");
   } catch (e) { toast(e.message); }
@@ -217,7 +218,7 @@ async function send() {
   if (STATE.busy || STATE.ended || !STATE.thread) return;
   const input = $("#msg"); const text = input.value.trim();
   if (!text) { toast("請先輸入你的回應。"); return; }
-  STATE.busy = true; input.disabled = true; $("#send").disabled = true;
+  STATE.busy = true; input.disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
   addMessage("user", text, "你"); input.value = "";
   const thinking = addMessage("bot thinking", "⌛ 思考中…");
   try {
@@ -229,11 +230,45 @@ async function send() {
     addMessage("bot", d.ai_reply, "奧客");
     updateMeter(d.anger, d.turn, d.max_turns);
     if (d.ended) { STATE.ended = true; addMessage("bot", d.ending_line, "奧客"); showReport(d); }
-    else { STATE.busy = false; input.disabled = false; $("#send").disabled = false; input.focus(); }
+    else { STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; input.focus(); }
   } catch (e) {
     thinking.remove(); toast(e.message);
-    STATE.busy = false; input.disabled = false; $("#send").disabled = false; input.value = text; input.focus();
+    STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; input.value = text; input.focus();
   }
+}
+
+// ---------- 語音輸入(MediaRecorder → /api/stt → 填進輸入框)----------
+let mediaRec = null, recChunks = [], recording = false;
+async function toggleMic() {
+  const mic = $("#mic");
+  if (recording) { try { mediaRec && mediaRec.stop(); } catch {} return; }
+  if (STATE.busy || STATE.ended || !STATE.thread) return;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { toast("無法使用麥克風,請檢查瀏覽器權限。"); return; }
+  recChunks = [];
+  mediaRec = new MediaRecorder(stream);
+  mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+  mediaRec.onstop = async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    recording = false; mic.classList.remove("recording"); mic.textContent = "🎤";
+    const blob = new Blob(recChunks, { type: mediaRec.mimeType || "audio/webm" });
+    if (!blob.size) return;
+    const input = $("#msg"), ph = input.placeholder;
+    mic.disabled = true; input.placeholder = "辨識中…";
+    try {
+      const fd = new FormData(); fd.append("audio", blob, "rec.webm");
+      const res = await fetch("/api/stt", { method: "POST", body: fd });
+      if (!res.ok) { let m = "辨識失敗"; try { m = (await res.json()).detail || m; } catch {} throw new Error(m); }
+      const { text } = await res.json();
+      if (text) { input.value = (input.value ? input.value + " " : "") + text; }
+      else { toast("沒聽清楚,請再說一次。"); }
+      input.focus();
+    } catch (e) { toast(e.message); }
+    finally { input.placeholder = ph; if (!STATE.ended && STATE.thread) mic.disabled = false; }
+  };
+  mediaRec.start();
+  recording = true; mic.classList.add("recording"); mic.textContent = "■";
 }
 
 // ---------- 報告 ----------
@@ -324,6 +359,7 @@ document.querySelectorAll(".navlink").forEach((l) =>
   l.addEventListener("click", () => { const v = l.dataset.view; showView(v); if (v === "history") loadHistory(); }));
 $(".brand").addEventListener("click", () => showView("select"));
 $("#send").addEventListener("click", send);
+$("#mic").addEventListener("click", toggleMic);
 $("#msg").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); if (!STATE.busy && !STATE.ended) send(); }
 });

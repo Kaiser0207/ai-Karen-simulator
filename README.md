@@ -47,7 +47,7 @@ OKEKE_USE_MOCK=1 uv run pytest # 單元/端對端測試(免 API key)
 - Gradio 網頁:串流式即時回饋、彩色憤怒進度條、結算雷達圖
 - 對話存檔(`logs/`)+ 歷史紀錄頁回放(對話、情緒/憤怒軌跡、報告)
 - 語音輸入(麥克風 → faster-whisper → 繁中,GPU 加速,啟動預載)
-- 自訂網頁前端(`web/`:FastAPI + 原生 HTML/CSS/JS,AKARU 風橫向選關卡、即時對戰、歷史回放;免 build)
+- 自訂網頁前端(`web/`:FastAPI + 原生 HTML/CSS/JS,AKARU 風橫向選關卡、即時對戰、歷史回放、語音輸入;免 build)
 - 結構化輸出解析失敗自動重試 + 後備(奧客中性台詞 / 評審退關鍵字報告,不會卡死或無報告)
 - 工作階段持久化:伺服器重啟可從 checkpointer 還原進行中的對局
 - 單元 + 端對端測試(`tests/`,pytest;結局優先級、憤怒值夾限、mock 評分、整場流程)
@@ -74,7 +74,7 @@ scenarios/
   *.json          # 奧客角色設定(zhang_dama / liu_dong)
 prompts/          # customer_system.txt / judge_system.txt
 web/              # 自訂網頁前端
-  server.py       # FastAPI 薄層:把 graph 包成 JSON API(/api/scenarios|start|say|history)
+  server.py       # FastAPI 薄層:把 graph 包成 JSON API(/api/scenarios|start|say|history|stt)
   static/         # 原生 HTML/CSS/JS + 自架字體(免 build)
 tests/            # pytest:結局判定、apply_state、mock 評分、端對端整場
 docs/             # 功能架構、LLM 詳解、開發錯誤紀錄、逐課學習教材;worklog.md / 除錯筆記.md(Kaiser0207)
@@ -88,8 +88,9 @@ logs/             # 每場對話存檔(gitignore)
 | `OKEKE_USE_MOCK` | 1=mock(免 key);0=真實 LLM |
 | `LLM_PROVIDER` / `GOOGLE_API_KEY` / `GROQ_API_KEY` | LLM 供應商與金鑰 |
 | `CUSTOMER_MODEL` / `JUDGE_MODEL` | 模型名稱(預設 gemini-2.5-flash) |
-| `STT_DEVICE` / `STT_COMPUTE` / `STT_MODEL` | 語音:cuda/float16/medium(或 cpu/int8) |
+| `STT_DEVICE` / `STT_COMPUTE` / `STT_MODEL` | 語音:cuda/float16/medium(或 cpu/int8;標點建議 large-v3) |
 | `STT_WARMUP` | 1=網頁啟動就把 STT 模型預載到 GPU |
+| `STT_PROMPT` | 餵 Whisper 的引導句(含標點)→ 提升中文標點輸出;空=不引導 |
 
 ## 後續
 

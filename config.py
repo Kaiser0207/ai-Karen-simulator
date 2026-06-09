@@ -29,3 +29,5 @@ STT_DEVICE = os.getenv("STT_DEVICE", "cpu")  # cpu 或 cuda
 STT_COMPUTE = os.getenv("STT_COMPUTE", "int8")  # CPU 用 int8;GPU 用 float16
 STT_LANGUAGE = os.getenv("STT_LANGUAGE", "zh")
 STT_WARMUP = os.getenv("STT_WARMUP", "1") == "1"  # 1=網頁啟動就預載模型到 GPU
+# 餵給 Whisper 的引導句(本身含標點)→ 顯著提升中文標點輸出;設空字串=不引導
+STT_PROMPT = os.getenv("STT_PROMPT", "以下是一段繁體中文對話,內容包含逗號、句號、問號等標點符號。")

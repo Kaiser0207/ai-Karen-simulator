@@ -85,10 +85,19 @@ def _to_traditional(text: str) -> str:
 
 
 def transcribe(audio_path: str) -> str:
-    """把音檔轉成繁體中文文字。空輸入直接回空字串(不載入模型)。"""
+    """把音檔轉成繁體中文文字。空輸入直接回空字串(不載入模型)。
+
+    initial_prompt 餵一句「含標點的中文」→ Whisper 會延續該風格、把標點補出來
+    (medium 常漏標點,大模型 + 引導句最有效);vad_filter 去除靜音段、減少幻聽。
+    """
     if not audio_path:
         return ""
-    segments, _ = _get_model().transcribe(audio_path, language=config.STT_LANGUAGE)
+    segments, _ = _get_model().transcribe(
+        audio_path,
+        language=config.STT_LANGUAGE,
+        initial_prompt=config.STT_PROMPT or None,
+        vad_filter=True,
+    )
     text = "".join(seg.text for seg in segments).strip()
     return _to_traditional(text)
 

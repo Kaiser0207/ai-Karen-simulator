@@ -208,23 +208,29 @@ llm = _get_chat(...).with_structured_output(CustomerTurn)
 
 ## 5. `judge_report(...)` —— 評審大腦(第 37~40、221~225 行)
 
+> 📌 **已升級為 outcome-aware**:現在 `judge_report` 還會收 `ending_type / anger_history / max_turns`,組一段「本場結果」一起給評審,讓分數呼應勝負。詳見 [後端邏輯變化.md](後端邏輯變化.md) 變更 3。
+
 ### 傳入 / 回傳
 ```python
-def judge_report(messages: list) -> JudgeReport
+def judge_report(messages, ending_type=None, anger_history=None, max_turns=None) -> JudgeReport
 ```
-- **傳入**:整場的 `messages`(全部對話)。
+- **傳入**:整場 `messages` + 結局類型 + 憤怒軌跡。
 - **回傳**:`JudgeReport`(同理心/危機應變/法規遵從三個分數 + 好/壞話術 + 總評)。
 
 ### 真實版怎麼組 prompt?
 ```python
-def _real_judge_report(messages):
+def _real_judge_report(messages, outcome_note="", ending_type=None):
     llm = _get_chat(config.JUDGE_MODEL, temperature=0.2).with_structured_output(JudgeReport)
-    return llm.invoke([SystemMessage(content=_judge_system_prompt()), *messages])
+    msgs = [SystemMessage(_judge_system_prompt())]
+    if outcome_note: msgs.append(SystemMessage(outcome_note))  # 本場結果(結局+軌跡)
+    msgs.extend(messages)
+    return _invoke_structured(llm, msgs)   # 解析失敗會重試,全失敗退回 mock 報告
 ```
 
 - system 訊息來自 [../prompts/judge_system.txt](../prompts/judge_system.txt)(要它扮演「客訴處理教練」、客觀評分)。
-- 後面接 `*messages`(整場對話)讓它審閱。
+- 再加一段 `outcome_note`(結局 + 憤怒軌跡),最後接 `*messages`(整場對話)。
 - **temperature=0.2**(比奧客的 0.8 低)→ 評分更穩定、少隨機。
+- `_invoke_structured`:格式解析失敗會重試,真的失敗退回 mock 報告(確保一定有結算)。
 
 > 為什麼評審要獨立於奧客?因為「入戲生氣的奧客」打分不客觀,評審需要抽離視角,所以是**另一次、不同 prompt、不同溫度**的呼叫。
 

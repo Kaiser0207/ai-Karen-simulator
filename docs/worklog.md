@@ -116,6 +116,15 @@
   - 「換一關」清掉 `STATE`;Enter 送出加 `busy/ended` 護欄 + `preventDefault`;Esc / 點背景關閉評審報告。
 - 測試:新增 `tests/test_integration.py`(端對端跑完整場、#1 血條歸零不結束、loader 驗證、所有關卡可載入),全套 **25 passed**。
 
+### 2026-06-09 自訂網頁前端接語音輸入(branch `feat/web-stt`)
+- 後端 `web/server.py` 加 `POST /api/stt`:`UploadFile`(瀏覽器 webm/opus)→ 暫存 → `run_in_threadpool(stt.transcribe)` → 回 `{text}`;
+  啟動背景 `stt.warmup`(`STT_WARMUP`)預載模型,第一次錄音不卡。沿用朋友的 `services/stt.py`(未改其核心)。
+- 前端 composer 加 🎤 鈕:`MediaRecorder` 按一下錄、再按一下停 → POST `/api/stt` → 文字填回輸入框(可再編輯送出);
+  錄音中紅色脈動;與 `#send` 一起啟用/停用。
+- **標點符號**(medium 常漏):`stt.transcribe` 加 `initial_prompt`(含標點的引導句,`config.STT_PROMPT`)+ `vad_filter=True`;
+  引導句本身帶標點 → Whisper 延續風格把標點補出來。大模型(large-v3)效果最佳(本機 RTX 3090/24GB 跑 large-v3 float16 僅約 5GB,綽綽有餘)。
+- 驗證:`/api/stt` 回 200(sine 測試音→空字串正確);GPU 用量 11→2243MiB 確認走 cuda;pytest 25 passed。
+
 ### 後端分析待辦(2026-06-09 盤點,前端穩定後再做)
 高優先:
 - `graph/nodes.py:50` **anger<=0 自動判 success** 違反設計(該由 LLM `ended` 決定)→ 修掉血條自動結束。

@@ -15,7 +15,7 @@
 | 函式 | 角色 | 何時呼叫 |
 |------|------|---------|
 | `customer_turn(system_prompt, anger, messages, player_input)` | 奧客大腦 | 每回合 |
-| `judge_report(messages)` | 評審大腦 | 結束一次 |
+| `judge_report(messages, ending_type, anger_history, max_turns)` | 評審大腦(結果感知) | 結束一次 |
 
 兩者都先看 `.env` 的 `OKEKE_USE_MOCK` 決定走 mock 還是真實:
 
@@ -101,18 +101,31 @@ llm = _get_chat(...).with_structured_output(CustomerTurn)
 
 ---
 
-## 6. 評審大腦 judge_report
+## 6. 評審大腦 judge_report(已升級:結果感知 outcome-aware)
 
 ```python
-def _real_judge_report(messages):
+def judge_report(messages, ending_type=None, anger_history=None, max_turns=None):
+    note = _outcome_note(ending_type, anger_history, max_turns)   # 組「本場結果」說明
+    ...                                                           # mock / 真實分流
+def _real_judge_report(messages, outcome_note="", ending_type=None):
     llm = _get_chat(config.JUDGE_MODEL, temperature=0.2).with_structured_output(JudgeReport)
-    return llm.invoke([SystemMessage(content=_judge_system_prompt()), *messages])
+    msgs = [SystemMessage(_judge_system_prompt())]
+    if outcome_note: msgs.append(SystemMessage(outcome_note))     # 把結局+憤怒軌跡一起給它
+    msgs.extend(messages)
+    ...
 ```
-- system prompt 來自 `prompts/judge_system.txt`(要它當「客訴教練」客觀評分)。
-- 後接整場 `*messages` 讓它審閱。
+- system prompt 來自 `prompts/judge_system.txt`(當「客訴教練」客觀評分,含校準規則與評分錨點)。
+- **outcome-aware**:除了整場對話,還多送一段 `_outcome_note`(結局是 fail/success/timeout + 憤怒值軌跡),讓評分**呼應勝負**——避免「顧客最後爆走卻誇店員處理優秀」的矛盾。
 - **temperature 0.2**(比奧客的 0.8 低)→ 評分更穩定。
 
 > 為什麼評審獨立於奧客?入戲生氣的奧客打分不客觀,評審需要抽離視角 → 另一次、不同 prompt、不同溫度的呼叫。
+
+### 結構化輸出:解析重試 + 後備(robustness)
+LLM 偶爾會吐不符 schema 的東西,所以包了 `_invoke_structured`:**同 prompt 重抽最多 3 次**;真的還是失敗就**優雅降級**:
+- 奧客大腦 → 回一句中性台詞(`anger_change=0`),遊戲不卡死。
+- 評審 → 退回 **mock 關鍵字報告**,確保結束時一定有報告。
+
+> 注意分工:這裡的重試專處理「**格式解析失敗**」;前端/web 層另有「**429 暫時性錯誤**」的重試,兩者不同。
 
 ---
 

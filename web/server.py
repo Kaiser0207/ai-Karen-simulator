@@ -12,20 +12,25 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import tempfile
 import threading
 import time
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
+import config
 import storage
 from graph.build import build_graph
 from scenarios import loader
+from services import stt
 
 # 建一次圖。多執行緒下 SQLite 連線需 check_same_thread=False;
 # 加 timeout(被鎖時最多等 30s 而非立刻拋 "database is locked")+ WAL(讀寫併發較友善)。
@@ -46,6 +51,11 @@ def _graph_invoke(payload, cfg):
 def _graph_get_state(cfg):
     with _DB_LOCK:
         return GRAPH.get_state(cfg)
+
+
+# STT 語音輸入:啟動就背景預載模型(不擋啟動),讓第一次錄音不卡。STT_WARMUP=0 可關。
+if config.STT_WARMUP:
+    threading.Thread(target=stt.warmup, daemon=True).start()
 
 
 # thread_id -> 本場附加資訊(graph state 由 checkpointer 存;這裡只記「是否首回合」「關卡」「最後活動時間」)。
@@ -242,6 +252,28 @@ def api_history():
         g["ending_label"] = ENDING_LABEL.get(g.get("ending_type"), g.get("ending_type"))
         out.append(g)
     return out
+
+
+@app.post("/api/stt")
+async def api_stt(audio: UploadFile = File(...)):
+    """瀏覽器錄音(webm/opus)→ faster-whisper 轉繁中文字。給語音輸入用。"""
+    data = await audio.read()
+    if not data:
+        raise HTTPException(400, "沒有收到音訊,請再錄一次。")
+    suffix = os.path.splitext(audio.filename or "")[1] or ".webm"
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    try:
+        tmp.write(data)
+        tmp.close()
+        text = await run_in_threadpool(stt.transcribe, tmp.name)  # 不擋事件迴圈
+    except Exception:  # noqa: BLE001
+        raise HTTPException(503, "語音辨識失敗,請改用打字或再錄一次。")
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+    return {"text": text}
 
 
 @app.get("/api/history/{thread_id}")

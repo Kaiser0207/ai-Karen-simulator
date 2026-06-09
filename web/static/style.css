@@ -85,7 +85,9 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   background: linear-gradient(125deg, rgba(255,255,255,.06), rgba(14,14,14,.10)); }
 .okeke-visual .num { position: absolute; top: 26px; left: 30px; z-index: 1;
   font-family: var(--f-num); font-size: 1.6rem; letter-spacing: .1em; color: var(--ink); opacity: .82; }
-.okeke-visual .s-genre { position: absolute; top: 26px; right: 30px; z-index: 1; font-family: var(--f-mono);
+/* 標語(低怒氣・好安撫…):外層只定位+裁切,藥丸樣式放內層 span,靠 .rev 機制「拉開才上滑」顯示 */
+.okeke-visual .s-genre { position: absolute; top: 26px; right: 30px; z-index: 1; }
+.okeke-visual .s-genre > span { font-family: var(--f-mono);
   font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink);
   background: rgba(255,255,255,.55); border: 1px solid rgba(14,14,14,.18); padding: 5px 12px; border-radius: 999px; }
 /* 圖示置中於 panel(色塊鋪滿整個 panel,故 50% 即 panel 中央)*/
@@ -154,11 +156,82 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .okeke-card .ok-persona { color: var(--muted); font-size: .9rem; margin: 0; }
 .okeke-card .pill { display: inline-block; font-family: var(--f-mono); font-size: 10px; font-weight: 700;
   letter-spacing: .1em; padding: 4px 10px; border-radius: 999px; color: var(--ink); }
+/* ── 奧客立繪(emoji,情緒換臉;之後可換手繪圖)── */
+.okeke-face { width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 48px; line-height: 1; margin: 4px auto 12px; background: var(--card2);
+  border: 3px solid var(--lvl, var(--red)); box-shadow: 0 6px 18px rgba(0,0,0,.12);
+  user-select: none; transition: border-color .3s ease; }
+.okeke-face.has-img { width: 124px; height: 124px; font-size: 0; background: #fff; padding: 0; overflow: hidden; }
+.okeke-face.has-img img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%; display: block; }
+.okeke-face.face-pop { animation: facepop .34s cubic-bezier(.34,1.56,.64,1); }
+@keyframes facepop { 0% { transform: scale(.68); } 60% { transform: scale(1.14); } 100% { transform: scale(1); } }
+.okeke-face[data-emo="angry"] { animation: faceshake .4s ease; }
+@keyframes faceshake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+
+/* ── 壓力模式:回合倒數 + 音效 ── */
+.timer-card { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 16px 18px;
+  box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 10px; }
+.timer-track { height: 8px; border-radius: 999px; background: var(--card2); overflow: hidden; }
+.timer-fill { height: 100%; border-radius: 999px; background: var(--lvl, var(--red)); width: 100%; }
+.timer-fill.low { background: #e0584d; }
+.timer-card.warn .timer-track { box-shadow: 0 0 0 2px rgba(224,88,77,.4); }
 .meter-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
 .meter-turn { font-family: var(--f-mono); font-size: 12px; color: var(--dim); letter-spacing: .08em; }
 .meter-anger { font-weight: 700; }
 .meter-bar { height: 14px; background: #e7e0d0; border-radius: 999px; overflow: hidden; }
 .meter-fill { height: 100%; border-radius: 999px; transition: width .5s cubic-bezier(.22,1,.36,1); }
+/* 讓步成本條(本關色;超支變紅)*/
+.cost-label { margin-top: 12px; margin-bottom: 6px; }
+.meter-cost { font-weight: 700; font-size: .92rem; }
+.meter-cost.over { color: #e0584d; }
+.cost-track { height: 10px; }
+.cost-fill { background: var(--lvl, var(--red)); }
+.cost-fill.over { background: #e0584d; }
+/* 開場身分簡報 */
+.okeke-card .ok-brief { font-size: .82rem; color: var(--muted); margin: 0 0 8px;
+  padding: 7px 10px; background: var(--card2); border-radius: 10px; line-height: 1.45; }
+/* 報告內讓步成本提示 */
+.report-costline { font-size: .85rem; color: var(--muted); margin: 4px 0 2px; }
+.report-costline.over { color: #e0584d; font-weight: 600; }
+.shift-progress { font-family: var(--f-mono); font-size: 11px; letter-spacing: .08em; color: var(--muted); margin: 8px 0 0; }
+
+/* ── 班次:每位客人折疊對話區 ── */
+.cust-block { border: 1px solid var(--border); border-radius: 14px; margin-bottom: 12px; background: var(--card); overflow: hidden; }
+.cust-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 11px 14px; background: var(--card); border: none; cursor: pointer; text-align: left;
+  font-family: var(--f-head); font-weight: 700; font-size: .9rem; color: var(--ink); }
+.cust-head:hover { background: var(--card2); }
+.cust-head-l::before { content: "▾ "; color: var(--muted); }
+.cust-block.collapsed .cust-head-l::before { content: "▸ "; }
+.cust-head-r { font-family: var(--f-mono); font-size: 11px; letter-spacing: .05em; padding: 3px 10px;
+  border-radius: 999px; background: var(--card2); color: var(--muted); white-space: nowrap; }
+.cust-head-r.live { background: var(--lvl, var(--red)); color: #fff; }
+.cust-block.done.success .cust-head-r { background: #2e9e6b; color: #fff; }
+.cust-block.done.fail .cust-head-r { background: #FE494A; color: #fff; }
+.cust-block.done.timeout .cust-head-r { background: #f39c12; color: #fff; }
+.cust-body { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+.cust-block.collapsed .cust-body { display: none; }
+.shift-advance { display: flex; justify-content: center; padding: 6px 0 10px; }
+
+/* ── 班次總報告 ── */
+.shift-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(86px, 1fr)); gap: 10px; margin: 8px 0 6px; }
+.sstat { background: var(--card2); border-radius: 12px; padding: 12px 8px; text-align: center; font-size: .78rem; color: var(--muted); }
+.sstat b { display: block; font-family: var(--f-num); font-size: 1.5rem; color: var(--ink); margin-bottom: 2px; }
+.shift-rows { display: flex; flex-direction: column; gap: 8px; }
+.srow-block { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.srow-block.success { border-left: 3px solid #2e9e6b; }
+.srow-block.fail { border-left: 3px solid #FE494A; }
+.srow-block.timeout { border-left: 3px solid #f39c12; }
+.srow-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 11px 14px; background: var(--card); border: none; cursor: pointer; text-align: left;
+  font-weight: 600; font-size: .9rem; color: var(--ink); }
+.srow-head:hover { background: var(--card2); }
+.srow-head > span:first-child::before { content: "▾ "; color: var(--muted); }
+.srow-block.collapsed .srow-head > span:first-child::before { content: "▸ "; }
+.srow-r { font-family: var(--f-mono); font-size: .8rem; color: var(--muted); white-space: nowrap; }
+.srow-detail { padding: 4px 14px 14px; }
+.srow-block.collapsed .srow-detail { display: none; }
 
 .game-main { display: flex; flex-direction: column; min-height: 540px; }
 .chat { flex: 1; background: var(--card2); border: 1px solid var(--border); border-radius: 22px;
@@ -189,20 +262,45 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 10px; }
 .voice-head { font-family: var(--f-head); font-weight: 800; font-size: .95rem; }
 .voice-row { display: flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--muted); }
-.voice-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--red); cursor: pointer; }
-.voice-slider { display: flex; flex-direction: column; gap: 7px; }
+.voice-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--lvl, var(--red)); cursor: pointer; }
+.voice-slider { display: flex; flex-direction: column; gap: 9px; }
 .voice-sliderlabel { font-size: .9rem; color: var(--muted); }
-.voice-sliderlabel b { font-family: var(--f-num); font-size: 1.05rem; color: var(--ink); letter-spacing: .03em; }
-.voice-slider input[type="range"] { width: 100%; accent-color: var(--red); cursor: pointer; }
+.voice-sliderlabel b { font-family: var(--f-num); font-size: 1.15rem; color: var(--lvl, var(--ink)); letter-spacing: .03em; }
+
+/* ── 自訂圓角滑桿(沿用結算畫面語彙:圓角軌道 + 本關色填充)── */
+.voice-slider input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 22px;
+  background: transparent; cursor: pointer; margin: 0; }
 .voice-slider input[type="range"]:disabled { cursor: not-allowed; }
+.voice-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 999px;
+  background: linear-gradient(to right,
+    var(--lvl, var(--red)) 0 var(--fill, 20%), var(--card2) var(--fill, 20%) 100%); }
+.voice-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -5px;
+  width: 18px; height: 18px; border-radius: 50%; background: #fff;
+  border: 4px solid var(--lvl, var(--red)); box-shadow: 0 2px 8px rgba(0,0,0,.22);
+  transition: transform .12s ease; }
+.voice-slider input[type="range"]::-moz-range-track {
+  height: 8px; border-radius: 999px; background: var(--card2); }
+.voice-slider input[type="range"]::-moz-range-progress {
+  height: 8px; border-radius: 999px; background: var(--lvl, var(--red)); }
+.voice-slider input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%; background: #fff;
+  border: 4px solid var(--lvl, var(--red)); box-shadow: 0 2px 8px rgba(0,0,0,.22); }
+.voice-slider input[type="range"]:not(:disabled):hover::-webkit-slider-thumb { transform: scale(1.12); }
+.voice-slider input[type="range"]:not(:disabled):active::-webkit-slider-thumb { transform: scale(1.2); }
+.voice-slider input[type="range"]:not(:disabled):hover::-moz-range-thumb { transform: scale(1.12); }
+.voice-slider input[type="range"]:focus-visible { outline: none; }
+.voice-slider input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--lvl, var(--red)) 35%, transparent); }
 .voice-hint { font-size: .78rem; color: var(--dim); line-height: 1.4; }
 
 /* ── 評審報告 ── */
 .report-overlay { position: fixed; inset: 0; background: rgba(26,26,26,.55); backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 50; animation: fade .3s ease; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-.report-card { background: var(--card); border-radius: 26px; max-width: 540px; width: 100%;
-  max-height: 90vh; overflow-y: auto; padding: 30px 30px 26px; box-shadow: 0 30px 80px rgba(0,0,0,.4); }
+.report-card { background: var(--card); border-radius: 26px; width: min(92vw, clamp(460px, 40vw, 860px));
+  max-height: 90vh; overflow-y: auto; padding: 34px 36px 28px; box-shadow: 0 30px 80px rgba(0,0,0,.4); }
 .report-ending { font-family: var(--f-mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
 .report-score { font-family: var(--f-num); font-size: 5rem; line-height: 1; color: var(--red); }
 .report-score small { font-size: 1.3rem; color: var(--dim); }

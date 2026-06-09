@@ -160,6 +160,8 @@ def api_scenarios():
             "opening_line": sc.get("opening_line", ""),
             "initial_anger": sc.get("initial_anger", 50),
             "max_turns": sc.get("max_turns", 8),
+            "difficulty": sc.get("difficulty", "normal"),
+            "shop": sc.get("shop", ""),
         })
     return out
 
@@ -183,7 +185,12 @@ def api_start(req: StartReq):
         "anger": init["anger"],
         "turn": 0,
         "max_turns": init["max_turns"],
-        "scenario": {"name": sc["name"], "genre": sc["genre"], "persona": sc.get("persona", "")},
+        "cost_budget": int(sc.get("cost_budget", 80) or 80),
+        "scenario": {
+            "name": sc["name"], "genre": sc["genre"], "persona": sc.get("persona", ""),
+            "shop": sc.get("shop", ""), "player_role": sc.get("player_role", ""),
+            "difficulty": sc.get("difficulty", "normal"), "char": sc.get("char", ""),
+        },
     }
 
 
@@ -220,6 +227,9 @@ def api_say(req: SayReq):
         "max_turns": result["max_turns"],
         "ended": bool(result.get("ended")),
         "ending_type": result.get("ending_type"),
+        "cost_spent": int(result.get("cost_spent", 0) or 0),
+        "cost_budget": int(sess["scenario"].get("cost_budget", 80) or 80),
+        "concession_cost": int(result.get("concession_cost", 0) or 0),
     }
 
     if resp["ended"]:

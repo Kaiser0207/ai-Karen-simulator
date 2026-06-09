@@ -44,6 +44,16 @@
       <aside class="game-side">
         <div class="okeke-card" id="okeke-card"></div>
         <div class="meter-card" id="meter-card"></div>
+        <div class="timer-card">
+          <div class="voice-head">⏱ 壓力模式</div>
+          <label class="voice-row"><input type="checkbox" id="ts-on" /><span>回合倒數計時</span></label>
+          <div class="voice-slider" id="ts-sec-row">
+            <div class="voice-sliderlabel">每回合 <b id="ts-sec-val">30</b> 秒</div>
+            <input type="range" id="ts-sec" min="10" max="60" step="5" value="30" />
+          </div>
+          <div class="timer-track"><div class="timer-fill" id="timer-bar"></div></div>
+          <label class="voice-row"><input type="checkbox" id="ts-sfx" checked /><span>🔊 音效(憤怒爆表 / 倒數)</span></label>
+        </div>
         <div class="voice-card">
           <div class="voice-head">🎤 語音輸入</div>
           <label class="voice-row"><input type="checkbox" id="vs-auto" checked /><span>靜音自動送出</span></label>

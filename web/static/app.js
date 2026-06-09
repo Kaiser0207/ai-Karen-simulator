@@ -11,7 +11,60 @@ const GENRE_STYLE = {
 const styleFor = (g) => GENRE_STYLE[g] || { grad: "#798e7b", emoji: "😤" };  // AKARU 灰綠
 const angerColor = (a) => (a >= 70 ? "#FE494A" : a >= 40 ? "#f39c12" : "#2e9e6b");
 
-let STATE = { thread: null, maxTurns: 8, busy: false, ended: false };
+// 難度 → 顏色 / 標籤 / 排序 / 休息態寬度(藍簡單最寬 → 綠困難最窄)。關卡顏色全程以難度為準。
+const DIFF_STYLE = {
+  easy:   { grad: "#8ca2b4", label: "簡單", rank: 0, rest: 0.20 },   // 藍:寬
+  normal: { grad: "#b692a1", label: "中等", rank: 1, rest: 0.16 },   // 粉:中
+  hard:   { grad: "#798e7b", label: "困難", rank: 2, rest: 0.12 },   // 綠:窄(三關 0.48 填滿標題右側)
+};
+const diffStyle = (d) => DIFF_STYLE[d] || DIFF_STYLE.normal;
+
+// 情緒 → 立繪。優先用手繪圖(/characters/<前綴>_<角色>.png),沒有(或載入失敗)退回 emoji。
+const FACE = { angry: "😡", annoyed: "😠", neutral: "😐", calm: "🙂", happy: "😄" };
+const FACE_PREFIX = { angry: "ang", annoyed: "annoy", neutral: "neu", calm: "calm", happy: "hap" };
+const emotionForAnger = (a) => (a >= 80 ? "angry" : a >= 55 ? "annoyed" : a >= 30 ? "neutral" : a >= 10 ? "calm" : "happy");
+function setOkekeFace(emotion) {
+  const f = $("#okeke-face"); if (!f) return;
+  const emo = emotion || "neutral";
+  f.dataset.emo = emo;
+  const ch = STATE.char;
+  if (ch) {                                   // 有角色圖:用手繪;載不到(如 girl 還沒畫)→ onerror 退 emoji
+    const src = `/characters/${FACE_PREFIX[emo] || "neu"}_${ch}.png`;
+    f.classList.add("has-img");
+    f.innerHTML = `<img src="${src}" alt="" onerror="this.closest('.okeke-face').classList.remove('has-img');this.closest('.okeke-face').textContent='${FACE[emo] || "😐"}'">`;
+  } else {
+    f.classList.remove("has-img");
+    f.textContent = FACE[emo] || "😐";
+  }
+  f.classList.remove("face-pop"); void f.offsetWidth; f.classList.add("face-pop");  // 重觸發動畫
+}
+
+// 音效:WebAudio 即時合成(免音檔)。憤怒爆表、怒氣飆升、倒數 tick、勝利。
+const SFX = (() => {
+  let ctx = null, on = true;
+  const ac = () => { if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} } return ctx; };
+  function tone(freq, dur, type = "sine", gain = 0.2, when = 0) {
+    const c = ac(); if (!c || !on) return;
+    const t = c.currentTime + when, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(gain, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.03);
+  }
+  return {
+    resume() { const c = ac(); if (c && c.state === "suspended") c.resume(); },
+    set(v) { on = v; },
+    tick() { tone(880, 0.05, "square", 0.05); },                               // 倒數每秒
+    tension() { tone(150, 0.2, "sawtooth", 0.16); tone(160, 0.2, "sawtooth", 0.1, 0.02); }, // 怒氣飆升
+    buzzer() { tone(110, 0.5, "square", 0.22); tone(104, 0.5, "square", 0.18); },           // 爆表 / 時間到
+    win() { tone(523, 0.12, "sine", 0.18); tone(659, 0.12, "sine", 0.18, 0.12); tone(784, 0.22, "sine", 0.18, 0.24); },
+  };
+})();
+
+let STATE = { thread: null, maxTurns: 8, busy: false, ended: false, anger: 0 };
+let SCENARIOS = [];          // /api/scenarios 快取(已依難度排序)
+let SHIFT = null;            // 班次:{ diff, queue:[scenario...], idx, results:[] }
+let curBody = null;          // 目前客人的對話折疊區(addMessage 寫入這裡)
 
 // ---------- 共用 ----------
 async function api(path, opts) {
@@ -26,6 +79,7 @@ function toast(msg) {
 }
 function escapeHtml(s) { return (s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 function showView(name) {
+  if (name !== "game" && typeof stopTurnTimer === "function") stopTurnTimer();  // 離開遊戲就停倒數
   document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
   $("#view-" + name).classList.remove("hidden");
   document.querySelectorAll(".navlink").forEach((l) => l.classList.toggle("is-active", l.dataset.view === name));
@@ -36,40 +90,57 @@ async function loadScenarios() {
   const track = $("#h-track");
   try {
     const list = await api("/api/scenarios");
+    // 依難度排:簡單(藍) → 中等(粉) → 困難(綠);同難度內依初始憤怒由低到高
+    list.sort((a, b) => (diffStyle(a.difficulty).rank - diffStyle(b.difficulty).rank)
+      || (a.initial_anger - b.initial_anger));
+    SCENARIOS = list;   // 快取給班次編排用
     track.querySelectorAll(".panel-okeke, .panel-soon").forEach((n) => n.remove());
-    list.forEach((s, i) => track.appendChild(okekePanel(s, i)));
-    track.appendChild(el(`<div class="panel panel-soon"><div class="soon-inner"><span>更多奧客<br/>敬請期待…</span></div></div>`));
+    // 選關畫面只有 3 關 = 三個難度(藍簡單/粉中等/綠困難),點進去才連續面對多位客人
+    const tiers = ["easy", "normal", "hard"].filter((d) => list.some((s) => (s.difficulty || "normal") === d));
+    tiers.forEach((d, i) => {
+      const customers = list.filter((s) => (s.difficulty || "normal") === d);
+      track.appendChild(tierPanel(d, customers, i));
+    });
+    track.appendChild(el(`<div class="panel panel-soon"><div class="soon-inner"><span>更多難度<br/>敬請期待…</span></div></div>`));
     initHScroll();
   } catch (e) { toast("載入關卡失敗:" + e.message); }
 }
-function okekePanel(s, i) {
-  const st = styleFor(s.genre);
+// 一個「難度關卡」面板:點進去 → 連續服務該難度的多位客人(班次)
+const TIER_META = {
+  easy:   { emoji: "🙂", tag: "新手友善", desc: "低怒氣・好安撫" },
+  normal: { emoji: "😤", tag: "標準奧客", desc: "會盧・要技巧" },
+  hard:   { emoji: "😡", tag: "火爆魔王", desc: "硬頸・易爆走" },
+};
+function tierPanel(difficulty, customers, i) {
+  const ds = diffStyle(difficulty);
+  const meta = TIER_META[difficulty] || TIER_META.normal;
+  const count = customers.length;
   const num = String(i + 1).padStart(2, "0");
-  // 大名拆成單字,每字各自一個 .rev 遮罩 → 一個字一個字錯開上滑
-  const nameChars = Array.from(s.name || "")
-    .map((ch) => `<span class="rev rev-char"><span>${ch === " " ? "&nbsp;" : escapeHtml(ch)}</span></span>`).join("");
+  // 大名(簡單/中等/困難)逐字遮罩 → 一個字一個字錯開上滑
+  const nameChars = Array.from(ds.label)
+    .map((ch) => `<span class="rev rev-char"><span>${escapeHtml(ch)}</span></span>`).join("");
   const p = el(`
-    <div class="panel panel-okeke">
-      <div class="okeke-visual" style="background:${st.grad}">
+    <div class="panel panel-okeke" data-diff="${difficulty}">
+      <div class="okeke-visual" style="background:${ds.grad}">
         <span class="num">${num}</span>
-        <span class="s-genre">${s.genre}</span>
-        <span class="emoji">${st.emoji}</span>
+        <span class="rev s-genre"><span>${meta.desc}</span></span>
+        <span class="emoji">${meta.emoji}</span>
       </div>
       <div class="okeke-foot">
         <div class="foot-panel">
           <div class="okeke-tags">
-            <span class="rev"><span class="tag">初始憤怒 ${s.initial_anger}</span></span>
-            <span class="rev"><span class="tag">${s.max_turns} 回合</span></span>
+            <span class="rev"><span class="tag">${meta.tag}</span></span>
+            <span class="rev"><span class="tag">${count} 位客人</span></span>
           </div>
           <h2 class="okeke-bigname">${nameChars}</h2>
-          <button class="okeke-start" type="button" style="--accent:${st.grad}">開始<br/>挑戰</button>
+          <button class="okeke-start" type="button" style="--accent:${ds.grad}">開始<br/>挑戰</button>
         </div>
       </div>
     </div>`);
   // 只有「開始挑戰」鈕能進關卡(避免點到面板任何地方、或滾動誤觸而誤入)
   p.querySelector(".okeke-start").addEventListener("click", (e) => {
     e.stopPropagation();
-    startGame(s.scenario_id);
+    startShift(difficulty);   // 進入該難度班次,從第一位開始連續服務
   });
   return p;
 }
@@ -87,13 +158,21 @@ function initHScroll() {
   const revCache = panels.map((p) => [...p.querySelectorAll(".rev")]);
   const introInner = panels.map((p) => p.querySelector(".intro-inner"));
   const footPanels = panels.map((p) => p.querySelector(".foot-panel"));
+  // 每個 panel 的「休息態寬度」依難度:藍簡單最寬 → 綠困難最窄(intro/敬請期待用預設窄條)
+  const DEFAULT_REST = 0.085;
+  const restCache = panels.map((p) => {
+    const d = p.dataset ? p.dataset.diff : null;
+    return d && DIFF_STYLE[d] ? DIFF_STYLE[d].rest : DEFAULT_REST;
+  });
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const smooth = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
   const lerp = (a, b, t) => a + (b - a) * t;
 
   // 各狀態占視窗比例(內層固定 = FOCUS/TITLE,外框裁切到下列寬度)
-  const TITLE = 0.52, FOCUS = 0.60, NEXT = 0.40, STRIP = 0.14, STRIP2 = 0.085;
-  function fracFor(panel, d) {                          // d = 該塊索引 − 焦點(0=焦點)
+  // 只有 3 個難度關卡:起始(標題聚焦)時,三關直接以「難度細條」並列在標題右側 ——
+  // 藍最寬 / 粉中 / 綠最窄(如 AKARU 圖)。聚焦某關時它長到 FOCUS,其餘維持細條。
+  const TITLE = 0.52, FOCUS = 0.60;
+  function fracFor(panel, d, rest) {                   // d = 該塊索引 − 焦點(0=焦點);rest=該塊休息態寬
     if (panel.classList.contains("panel-intro")) {
       if (d <= -1) return 0;                            // 被推出左邊
       if (d < 0) return TITLE * (1 + d);                // 隨焦點離開而縮去左側
@@ -101,10 +180,8 @@ function initHScroll() {
     }
     if (d <= -1) return 0;                              // 已捲出左邊
     if (d < 0) return FOCUS * (1 + d);                  // 正在離場
-    if (d < 1) return lerp(FOCUS, NEXT, d);             // 焦點(60%) → 下一關(40%)
-    if (d < 2) return lerp(NEXT, STRIP, d - 1);         // 下一關(40%) → 細條(14%)
-    if (d < 3) return lerp(STRIP, STRIP2, d - 2);       // 細條 → 更細
-    return STRIP2;                                       // 遠處皆細條
+    if (d < 1) return lerp(FOCUS, rest, smooth(d));     // 焦點(60%) → 直接收成該難度細條(無 0.40 on-deck)
+    return rest;                                         // 其餘 = 依難度寬(藍寬/粉中/綠窄),起始就三色並列
   }
 
   const STEP = 1100;                                    // 推進一關所需的滾輪量(px,大=較不靈敏/較慢)
@@ -115,7 +192,7 @@ function initHScroll() {
     if (Math.abs(targetF - curF) < 0.0015) curF = targetF;
     const VW = vp.clientWidth || 1;
     panels.forEach((p, i) => {
-      const frac = fracFor(p, i - curF);
+      const frac = fracFor(p, i - curF, restCache[i]);
       const basis = frac * VW;
       p.style.flexBasis = (basis > 0 ? basis : 0).toFixed(1) + "px";  // 防 NaN/負值破版
       if (p.classList.contains("panel-intro")) {
@@ -180,47 +257,115 @@ function initHScroll() {
   window.addEventListener("resize", () => { if (!raf) raf = requestAnimationFrame(frame); });
 }
 
-// ---------- 遊戲 ----------
-async function startGame(scenarioId) {
+// ---------- 班次(多客人):選難度 → 依序服務同難度多位客人 → 班次總報告 ----------
+function startShift(difficulty, fromId) {
+  const queue = SCENARIOS.filter((s) => (s.difficulty || "normal") === difficulty);
+  if (!queue.length) { toast("這個難度還沒有關卡。"); return; }
+  // 從點到的那位開始,接著服務同難度其餘客人(維持排序、輪一圈)
+  let start = 0;
+  if (fromId) { const k = queue.findIndex((s) => s.scenario_id === fromId); if (k > 0) start = k; }
+  const ordered = queue.slice(start).concat(queue.slice(0, start));
+  SHIFT = { diff: difficulty, queue: ordered, idx: 0, results: [] };
+  const side = document.querySelector(".game-side");
+  if (side) side.style.setProperty("--lvl", diffStyle(difficulty).grad);
+  SFX.resume();   // 開局點擊=使用者手勢,趁機解鎖 AudioContext
+  $("#chat").innerHTML = "";
+  $("#report").classList.add("hidden");
+  showView("game");
+  startCustomer();
+}
+
+async function startCustomer() {
+  const meta = SHIFT.queue[SHIFT.idx];
   try {
     const d = await api("/api/start", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scenario_id: scenarioId }),
+      body: JSON.stringify({ scenario_id: meta.scenario_id }),
     });
-    STATE = { thread: d.thread_id, maxTurns: d.max_turns, busy: false, ended: false };
-    const st = styleFor(d.scenario.genre);
+    STATE = { thread: d.thread_id, maxTurns: d.max_turns, busy: false, ended: false, anger: d.anger,
+      costSpent: 0, costBudget: d.cost_budget || 80, char: d.scenario.char || "" };
+    const ds = diffStyle(d.scenario.difficulty);          // 本關顏色以難度為準(藍簡/粉中/綠難)
+    const emoji = styleFor(d.scenario.genre).emoji;
+    const n = SHIFT.idx + 1, N = SHIFT.queue.length;
+    const brief = (d.scenario.shop || d.scenario.player_role)
+      ? `<div class="ok-brief">🏪 ${escapeHtml(d.scenario.shop || "")}${d.scenario.player_role ? ` · 你的身分:${escapeHtml(d.scenario.player_role)}` : ""}</div>`
+      : "";
     $("#okeke-card").innerHTML = `
-      <span class="pill" style="background:${st.grad}">${st.emoji} ${d.scenario.genre}</span>
+      <div class="okeke-face" id="okeke-face">😐</div>
+      <span class="pill" style="background:${ds.grad}">${emoji} ${ds.label} · ${d.scenario.genre}</span>
+      <div class="shift-progress">班次進度 ${n}/${N}</div>
       <div class="ok-name">${d.scenario.name}</div>
+      ${brief}
       <p class="ok-persona">${d.scenario.persona}</p>`;
+    setOkekeFace(emotionForAnger(d.anger));   // 開場依初始怒氣決定表情
     updateMeter(d.anger, d.turn, d.max_turns);
-    $("#chat").innerHTML = "";
+    // 收合先前客人,開一個新的折疊對話區給這位
+    document.querySelectorAll(".cust-block").forEach((b) => b.classList.add("collapsed"));
+    const block = el(`<div class="cust-block" data-idx="${SHIFT.idx}">
+      <button class="cust-head" type="button"><span class="cust-head-l">第 ${n}/${N} 位 · ${escapeHtml(d.scenario.name)}</span><span class="cust-head-r live">進行中</span></button>
+      <div class="cust-body"></div></div>`);
+    block.querySelector(".cust-head").addEventListener("click", () => block.classList.toggle("collapsed"));
+    $("#chat").appendChild(block);
+    curBody = block.querySelector(".cust-body");
     addMessage("bot", d.opening_line, d.scenario.name);
     $("#msg").disabled = false; $("#send").disabled = false; $("#mic").disabled = false;
     $("#msg").value = ""; $("#msg").focus();
-    $("#report").classList.add("hidden");
-    showView("game");
+    startTurnTimer();   // 換你回話 → 開始倒數
   } catch (e) { toast(e.message); }
 }
+
+function finishCustomer(d) {
+  stopTurnTimer();
+  $("#msg").disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
+  const meta = SHIFT.queue[SHIFT.idx];
+  SHIFT.results.push({
+    name: meta.name, scenario_id: meta.scenario_id,
+    ending_type: d.ending_type, ending_label: d.ending_label,
+    report: d.report, anger_history: d.anger_history,
+  });
+  // 本客人對話標上結果徽章(保持展開讓你讀;換下一位時才收合)
+  const block = $(`.cust-block[data-idx="${SHIFT.idx}"]`);
+  if (block) {
+    block.classList.add("done", d.ending_type);
+    const r = block.querySelector(".cust-head-r");
+    if (r) { r.classList.remove("live"); r.textContent = d.ending_label || d.ending_type; }
+  }
+  const last = SHIFT.idx >= SHIFT.queue.length - 1;
+  const adv = el(`<div class="shift-advance"><button class="btn-red" id="shift-next">${last ? "看班次總結 →" : "下一位客人 →"}</button></div>`);
+  $("#chat").appendChild(adv);
+  $("#chat").scrollTop = $("#chat").scrollHeight;
+  $("#shift-next").onclick = () => {
+    adv.remove();
+    if (last) showShiftReport();
+    else { SHIFT.idx += 1; startCustomer(); }
+  };
+}
 function updateMeter(anger, turn, maxTurns) {
+  const budget = STATE.costBudget || 80, spent = STATE.costSpent || 0;
+  const over = spent > budget;
+  const costPct = Math.min(100, (spent / budget) * 100);
   $("#meter-card").innerHTML = `
     <div class="meter-label"><span class="meter-anger">😠 憤怒值 ${anger}/100</span>
       <span class="meter-turn">回合 ${turn}/${maxTurns}</span></div>
-    <div class="meter-bar"><div class="meter-fill" style="width:${anger}%;background:${angerColor(anger)}"></div></div>`;
+    <div class="meter-bar"><div class="meter-fill" style="width:${anger}%;background:${angerColor(anger)}"></div></div>
+    <div class="meter-label cost-label"><span class="meter-cost ${over ? "over" : ""}">💸 讓步成本 ${spent}/${budget}${over ? " ⚠超支" : ""}</span></div>
+    <div class="meter-bar cost-track"><div class="meter-fill cost-fill ${over ? "over" : ""}" style="width:${costPct}%"></div></div>`;
 }
 function addMessage(role, text, who) {
   const tag = who ? `<span class="who">${who}</span>` : "";
   const node = el(`<div class="msg ${role}">${tag}${escapeHtml(text)}</div>`);
-  $("#chat").appendChild(node); $("#chat").scrollTop = $("#chat").scrollHeight;
+  (curBody || $("#chat")).appendChild(node);   // 寫進目前客人的折疊區
+  const chat = $("#chat"); chat.scrollTop = chat.scrollHeight;
   return node;
 }
 async function send() {
   if (STATE.busy || STATE.ended || !STATE.thread) return;
   const input = $("#msg"); const text = input.value.trim();
   if (!text) { toast("請先輸入你的回應。"); return; }
-  STATE.busy = true; input.disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
+  STATE.busy = true; stopTurnTimer(); input.disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
   addMessage("user", text, "你"); input.value = "";
   const thinking = addMessage("bot thinking", "⌛ 思考中…");
+  const prevAnger = STATE.anger;
   try {
     const d = await api("/api/say", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -228,9 +373,17 @@ async function send() {
     });
     thinking.remove();
     addMessage("bot", d.ai_reply, "奧客");
+    if (typeof d.cost_spent === "number") STATE.costSpent = d.cost_spent;
+    if (typeof d.cost_budget === "number") STATE.costBudget = d.cost_budget;
     updateMeter(d.anger, d.turn, d.max_turns);
-    if (d.ended) { STATE.ended = true; addMessage("bot", d.ending_line, "奧客"); showReport(d); }
-    else { STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; input.focus(); }
+    setOkekeFace(d.emotion || emotionForAnger(d.anger));   // 立繪換臉
+    STATE.anger = d.anger;
+    if (d.anger - prevAnger >= 12) SFX.tension();           // 怒氣一回合飆 ≥12 → 緊張音
+    if (d.ended) {
+      STATE.ended = true; addMessage("bot", d.ending_line, "奧客");
+      if (d.ending_type === "success") SFX.win(); else SFX.buzzer();   // 和解=勝利音;砸店/逾時=爆表音
+      finishCustomer(d);   // 收尾本客人 → 「下一位 / 看班次總結」
+    } else { STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; input.focus(); startTurnTimer(); }
   } catch (e) {
     thinking.remove(); toast(e.message);
     STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; input.value = text; input.focus();
@@ -256,10 +409,75 @@ function saveVoiceSettings() {
 function updateVoiceUI() {
   $("#vs-sec-row").style.opacity = VOICE.auto ? "1" : ".4";
   $("#vs-sec").disabled = !VOICE.auto;
+  const sl = $("#vs-sec");
+  if (sl) sl.style.setProperty("--fill", ((VOICE.sec - 1) / 14 * 100).toFixed(1) + "%");
   $("#vs-hint").textContent = VOICE.auto
     ? `說完停頓 ${VOICE.sec} 秒就自動辨識並送出;也可按一下■提早結束。`
     : "手動模式:按一下開始、再按一下結束,文字會填到輸入框讓你檢查再送。";
   const m = $("#mic"); if (m) m.title = VOICE.auto ? `按一下開始;靜音 ${VOICE.sec} 秒自動送出` : "按一下開始錄音,再按一下結束";
+}
+
+// ---------- 壓力模式:回合倒數 + 音效 ----------
+const TIMER = { on: false, sec: 30, sfx: true };
+let timerDeadline = 0, timerRAF = null, timerLastSec = -1;
+function loadTimerSettings() {
+  try { const s = JSON.parse(localStorage.getItem("okeke_timer") || "{}");
+    if (typeof s.on === "boolean") TIMER.on = s.on;
+    if (typeof s.sfx === "boolean") TIMER.sfx = s.sfx;
+    if (s.sec) TIMER.sec = Math.max(10, Math.min(60, s.sec)); } catch {}
+  $("#ts-on").checked = TIMER.on; $("#ts-sec").value = TIMER.sec;
+  $("#ts-sec-val").textContent = TIMER.sec; $("#ts-sfx").checked = TIMER.sfx;
+  SFX.set(TIMER.sfx); updateTimerUI();
+}
+function saveTimerSettings() {
+  TIMER.on = $("#ts-on").checked;
+  TIMER.sfx = $("#ts-sfx").checked;
+  TIMER.sec = Math.max(10, Math.min(60, parseInt($("#ts-sec").value, 10) || 30));
+  $("#ts-sec-val").textContent = TIMER.sec;
+  SFX.set(TIMER.sfx);
+  try { localStorage.setItem("okeke_timer", JSON.stringify(TIMER)); } catch {}
+  updateTimerUI();
+  // 即時生效:開了就在你的回合啟動、關了就停
+  if (!TIMER.on) stopTurnTimer();
+  else if (STATE.thread && !STATE.busy && !STATE.ended && !recording) startTurnTimer();
+}
+function updateTimerUI() {
+  const row = $("#ts-sec-row");
+  if (row) { row.style.opacity = TIMER.on ? "1" : ".4"; }
+  $("#ts-sec").disabled = !TIMER.on;
+  $("#ts-sec").style.setProperty("--fill", ((TIMER.sec - 10) / 50 * 100).toFixed(1) + "%");
+  if (!TIMER.on) { const b = $("#timer-bar"); if (b) { b.style.width = "100%"; b.classList.remove("low"); } document.querySelector(".timer-card")?.classList.remove("warn"); }
+}
+function startTurnTimer() {
+  stopTurnTimer();
+  if (!TIMER.on || !STATE.thread || STATE.ended) return;
+  timerDeadline = performance.now() + TIMER.sec * 1000;
+  timerLastSec = -1;
+  const bar = $("#timer-bar"), card = document.querySelector(".timer-card");
+  (function frame() {
+    if (!TIMER.on || STATE.ended) { stopTurnTimer(); return; }
+    const left = Math.max(0, timerDeadline - performance.now());
+    const frac = left / (TIMER.sec * 1000);
+    if (bar) { bar.style.width = (frac * 100).toFixed(1) + "%"; bar.classList.toggle("low", left <= 5000); }
+    if (card) card.classList.toggle("warn", left <= 5000 && left > 0);
+    const secLeft = Math.ceil(left / 1000);
+    if (secLeft <= 5 && secLeft >= 1 && secLeft !== timerLastSec) { timerLastSec = secLeft; SFX.tick(); }  // 最後 5 秒每秒滴答
+    if (left <= 0) { onTimerExpire(); return; }
+    timerRAF = requestAnimationFrame(frame);
+  })();
+}
+function stopTurnTimer() {
+  if (timerRAF) { cancelAnimationFrame(timerRAF); timerRAF = null; }
+  const bar = $("#timer-bar"); if (bar) { bar.style.width = "100%"; bar.classList.remove("low"); }
+  document.querySelector(".timer-card")?.classList.remove("warn");
+}
+function onTimerExpire() {
+  stopTurnTimer();
+  SFX.buzzer();
+  const input = $("#msg"), text = (input.value || "").trim();
+  if (text && !STATE.busy && !STATE.ended && STATE.thread) { send(); return; }  // 有打字 → 直接送出
+  toast("⏰ 時間到!快回應奧客!");                                              // 沒打字 → 催促 + 重新計時
+  if (!STATE.busy && !STATE.ended && STATE.thread) startTurnTimer();
 }
 
 let mediaRec = null, recChunks = [], recording = false, silenceAudioCtx = null;
@@ -320,40 +538,70 @@ async function toggleMic() {
     if (!STATE.ended && STATE.thread) mic.disabled = false;
     // 自動模式且有辨識到內容 → 直接送出;否則留給使用者檢查
     if (text && VOICE.auto && !STATE.busy && !STATE.ended && STATE.thread) send();
-    else input.focus();
+    else { input.focus(); if (!STATE.busy && !STATE.ended && STATE.thread) startTurnTimer(); }  // 回到手動檢查 → 倒數續跑
   };
   mediaRec.start();
   recording = true; mic.classList.add("recording"); mic.textContent = "■";
+  stopTurnTimer();   // 錄音中暫停倒數(避免邊講邊被時間壓)
   if (VOICE.auto) startSilenceMonitor(stream);
 }
 
 // ---------- 報告 ----------
-function showReport(d) {
-  const r = d.report;
-  const comp = Math.round((r.empathy_score + r.crisis_score + r.compliance_score) / 3);
+const _scoreOf = (rep) => {
+  if (!rep) return null;
+  const dims = [rep.empathy_score, rep.crisis_score, rep.compliance_score];
+  if (typeof rep.cost_control_score === "number") dims.push(rep.cost_control_score);
+  return Math.round(dims.reduce((a, b) => a + b, 0) / dims.length);
+};
+function showShiftReport() {
+  stopTurnTimer();
+  const rs = SHIFT.results, ds = diffStyle(SHIFT.diff);
   const metric = (label, v) => `
     <div class="metric"><div class="metric-top"><span>${label}</span><b>${(v / 10).toFixed(1)}</b></div>
       <div class="metric-bar"><div class="metric-fill" style="width:${v}%"></div></div></div>`;
-  const li = (arr) => arr.map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+  const li = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+  const scores = rs.map((r) => _scoreOf(r.report)).filter((x) => x != null);
+  const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+  const cnt = (t) => rs.filter((r) => r.ending_type === t).length;
+  const success = cnt("success"), fail = cnt("fail"), timeout = cnt("timeout");
+  const totalCost = rs.reduce((a, r) => a + ((r.report && r.report.cost_spent) || 0), 0);
+  let streak = 0, best = 0;
+  rs.forEach((r) => { if (r.ending_type === "success") { streak++; best = Math.max(best, streak); } else streak = 0; });
+  const rows = rs.map((r, i) => {
+    const sc = _scoreOf(r.report), rep = r.report;
+    const detail = rep ? `<div class="srow-detail">
+      ${metric("同理心 Empathy", rep.empathy_score)}${metric("危機應變 Crisis", rep.crisis_score)}${metric("法規遵從 Compliance", rep.compliance_score)}${typeof rep.cost_control_score === "number" ? metric("成本控制 Cost-control", rep.cost_control_score) : ""}
+      ${trajectorySVG(r.anger_history)}
+      <div class="report-h">✓ 做得好</div><ul class="report-list good">${li(rep.good_practices)}</ul>
+      <div class="report-h">→ 可改進</div><ul class="report-list bad">${li(rep.bad_practices)}</ul>
+      <div class="report-summary">${escapeHtml(rep.summary)}</div></div>` : "";
+    return `<div class="srow-block ${r.ending_type} collapsed">
+      <button class="srow-head" type="button"><span>第 ${i + 1} 位 · ${escapeHtml(r.name)}</span><span class="srow-r">${r.ending_label || r.ending_type}${sc != null ? ` · ${(sc / 10).toFixed(1)}` : ""}</span></button>
+      ${detail}</div>`;
+  }).join("");
   $("#report-card").innerHTML = `
-    <div class="report-ending">培訓報告 · ${d.ending_label}</div>
-    <div class="report-score">${(comp / 10).toFixed(1)}<small> / 10.0</small></div>
-    <div class="report-title">綜合表現</div>
-    ${metric("同理心 Empathy", r.empathy_score)}
-    ${metric("危機應變 Crisis", r.crisis_score)}
-    ${metric("法規遵從 Compliance", r.compliance_score)}
-    ${trajectorySVG(d.anger_history)}
-    <div class="report-h">✓ 做得好</div><ul class="report-list good">${li(r.good_practices)}</ul>
-    <div class="report-h">→ 可改進</div><ul class="report-list bad">${li(r.bad_practices)}</ul>
-    <div class="report-summary">${escapeHtml(r.summary)}</div>
+    <div class="report-ending">班次總結 · ${ds.label}難度 · 共 ${rs.length} 位客人</div>
+    <div class="report-score">${(avg / 10).toFixed(1)}<small> / 10.0</small></div>
+    <div class="report-title">平均表現</div>
+    <div class="shift-stats">
+      <div class="sstat"><b>${success}</b>滿意和解</div>
+      <div class="sstat"><b>${fail}</b>客訴砸店</div>
+      <div class="sstat"><b>${timeout}</b>逾時離開</div>
+      <div class="sstat"><b>🔥 ${best}</b>連續和解</div>
+      <div class="sstat"><b>💸 ${totalCost}</b>總讓步成本</div>
+    </div>
+    <div class="report-h">每位客人(點開看明細)</div>
+    <div class="shift-rows">${rows}</div>
     <div class="report-actions">
-      <button class="btn-red" id="r-again">再玩一次</button>
+      <button class="btn-red" id="r-again">回選難度</button>
       <button class="btn-ghost" id="r-close">關閉看對話</button>
     </div>`;
   $("#report").classList.remove("hidden");
-  $("#r-again").onclick = () => { $("#report").classList.add("hidden"); showView("select"); };
+  $("#report-card").scrollTop = 0;
+  $("#report-card").querySelectorAll(".srow-head").forEach((h) =>
+    h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed")));
+  $("#r-again").onclick = () => { $("#report").classList.add("hidden"); SHIFT = null; showView("select"); };
   $("#r-close").onclick = () => $("#report").classList.add("hidden");
-  // 點背景空白處也能關閉報告(只在點到 overlay 本身、非卡片內容時)
   $("#report").onclick = (e) => { if (e.target === $("#report")) $("#report").classList.add("hidden"); };
 }
 function trajectorySVG(hist) {
@@ -405,11 +653,14 @@ async function viewHistory(threadId) {
       <div class="metric"><div class="metric-top"><span>${label}</span><b>${(v / 10).toFixed(1)}</b></div>
         <div class="metric-bar"><div class="metric-fill" style="width:${v}%"></div></div></div>`;
     const li = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    const hasCost = r && typeof r.cost_control_score === "number";
     const reportHtml = r ? `
       <div class="report-h">綜合表現</div>
       ${metric("同理心 Empathy", r.empathy_score)}
       ${metric("危機應變 Crisis", r.crisis_score)}
       ${metric("法規遵從 Compliance", r.compliance_score)}
+      ${hasCost ? metric("成本控制 Cost-control", r.cost_control_score) : ""}
+      ${hasCost ? `<div class="report-costline ${r.cost_spent > r.cost_budget ? "over" : ""}">💸 讓步成本 ${r.cost_spent}/${r.cost_budget}</div>` : ""}
       <div class="report-h">✓ 做得好</div><ul class="report-list good">${li(r.good_practices)}</ul>
       <div class="report-h">→ 可改進</div><ul class="report-list bad">${li(r.bad_practices)}</ul>
       <div class="report-summary">${escapeHtml(r.summary)}</div>` : "";
@@ -437,12 +688,18 @@ $("#mic").addEventListener("click", toggleMic);
 $("#vs-auto").addEventListener("change", saveVoiceSettings);
 $("#vs-sec").addEventListener("input", saveVoiceSettings);   // 拖拉即時更新秒數
 loadVoiceSettings();
+$("#ts-on").addEventListener("change", saveTimerSettings);
+$("#ts-sec").addEventListener("input", saveTimerSettings);
+$("#ts-sfx").addEventListener("change", saveTimerSettings);
+loadTimerSettings();
 $("#msg").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); if (!STATE.busy && !STATE.ended) send(); }
 });
 // 換一關:回選關卡並清掉本場狀態(避免殘留 thread 造成誤送到舊對局)
 $("#quit").addEventListener("click", () => {
-  STATE = { thread: null, maxTurns: 8, busy: false, ended: false };
+  stopTurnTimer();
+  STATE = { thread: null, maxTurns: 8, busy: false, ended: false, anger: 0 };
+  SHIFT = null; curBody = null;
   showView("select");
 });
 $("#history-refresh").addEventListener("click", loadHistory);

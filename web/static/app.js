@@ -371,7 +371,7 @@ function trajectorySVG(hist) {
 
 // ---------- 歷史 ----------
 async function loadHistory() {
-  const grid = $("#history-grid"); $("#history-detail").classList.add("hidden");
+  const grid = $("#history-grid");
   try {
     const list = await api("/api/history");
     grid.innerHTML = list.length ? "" : `<p style="color:var(--muted)">還沒有任何對局紀錄。</p>`;
@@ -401,12 +401,30 @@ async function viewHistory(threadId) {
     const msgs = (d.transcript || []).map((m) =>
       `<div class="msg ${m.role === "user" ? "user" : "bot"}"><span class="who">${m.role === "user" ? "你" : "奧客"}</span>${escapeHtml(m.content)}</div>`).join("");
     const r = d.report;
-    const rep = r ? `<div class="report-summary" style="margin-top:16px"><b>同理心 ${(r.empathy_score/10).toFixed(1)} ｜ 危機 ${(r.crisis_score/10).toFixed(1)} ｜ 法規 ${(r.compliance_score/10).toFixed(1)}</b><br>${escapeHtml(r.summary)}</div>` : "";
-    const box = $("#history-detail");
-    box.innerHTML = `
-      <div class="section-head"><h2>${d.scenario_name} · ${d.ending_label || d.ending_type}</h2><span class="rule"></span></div>
-      ${trajectorySVG(d.anger_history)}<div class="transcript">${msgs}</div>${rep}`;
-    box.classList.remove("hidden"); box.scrollIntoView({ behavior: "smooth" });
+    const metric = (label, v) => `
+      <div class="metric"><div class="metric-top"><span>${label}</span><b>${(v / 10).toFixed(1)}</b></div>
+        <div class="metric-bar"><div class="metric-fill" style="width:${v}%"></div></div></div>`;
+    const li = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    const reportHtml = r ? `
+      <div class="report-h">綜合表現</div>
+      ${metric("同理心 Empathy", r.empathy_score)}
+      ${metric("危機應變 Crisis", r.crisis_score)}
+      ${metric("法規遵從 Compliance", r.compliance_score)}
+      <div class="report-h">✓ 做得好</div><ul class="report-list good">${li(r.good_practices)}</ul>
+      <div class="report-h">→ 可改進</div><ul class="report-list bad">${li(r.bad_practices)}</ul>
+      <div class="report-summary">${escapeHtml(r.summary)}</div>` : "";
+    $("#hist-card").innerHTML = `
+      <div class="report-ending">對話回放 · ${d.ending_label || d.ending_type}</div>
+      <div class="report-title">${escapeHtml(d.scenario_name || "")}</div>
+      ${trajectorySVG(d.anger_history)}
+      <div class="report-h">對話紀錄</div>
+      <div class="transcript">${msgs || '<p style="color:var(--muted);margin:0">(無對話)</p>'}</div>
+      ${reportHtml}
+      <div class="report-actions"><button class="btn-ghost" id="h-close">關閉</button></div>`;
+    $("#hist-overlay").classList.remove("hidden");
+    $("#hist-card").scrollTop = 0;
+    $("#h-close").onclick = () => $("#hist-overlay").classList.add("hidden");
+    $("#hist-overlay").onclick = (e) => { if (e.target === $("#hist-overlay")) $("#hist-overlay").classList.add("hidden"); };
   } catch (e) { toast(e.message); }
 }
 
@@ -428,9 +446,9 @@ $("#quit").addEventListener("click", () => {
   showView("select");
 });
 $("#history-refresh").addEventListener("click", loadHistory);
-// Esc 關閉評審報告覆蓋層
+// Esc 關閉評審報告 / 歷史回放覆蓋層
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") $("#report").classList.add("hidden");
+  if (e.key === "Escape") { $("#report").classList.add("hidden"); $("#hist-overlay").classList.add("hidden"); }
 });
 
 loadScenarios();

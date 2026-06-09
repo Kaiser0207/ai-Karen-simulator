@@ -239,7 +239,6 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; }
 /* 查看回放:對應該卡片的關卡顏色(零售藍/餐飲藕粉),不再固定藕粉 */
 .gcard-cta { color: var(--accent, var(--red)); font-weight: 700; font-family: var(--f-head); }
-#history-detail { margin-top: 26px; }
 .transcript { background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 20px;
   display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow-sm); }
 

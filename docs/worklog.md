@@ -133,6 +133,12 @@
 - 解法:`config.GEMINI_THINKING_BUDGET`(預設 0=關),`_get_chat` 的 gemini 分支傳 `thinking_budget=`;
   langchain-google-genai 有 `thinking_budget` 欄位。實測同一句 60s → **7.6s**,品質/語意不變,也省 thinking token。
 - 想更快(同等品質):`CUSTOMER_MODEL=gemini-2.5-flash-lite` 或 `gemini-2.0-flash`(.env 改即可)。
+- **flash-lite 實測**(thinking off):短句 2.6s(首呼暖機)、中句 1.2s、長句 1.6s → 比 flash(關 thinking)7.6s 再快 ~5×,扮演品質接得上。
+
+### 2026-06-09 歷史紀錄改「中等彈窗」回放
+- 原本點歷史卡片是 inline 展開(偏簡潔)→ 改成**覆蓋層彈窗**(複用 `report-overlay`/`report-card`,與培訓報告同款 540px/90vh)。
+- 內容:結局標籤 + 關卡名 + 憤怒值軌跡 + **完整對話紀錄**(transcript)+ 完整評審(三分數條 + 做得好/可改進 + 總評)。
+- 關閉:關閉鈕 / Esc / 點背景。移除 inline `#history-detail`(及其 CSS)。
 
 ### 後端分析待辦(2026-06-09 盤點,前端穩定後再做)
 高優先:

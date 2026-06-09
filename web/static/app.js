@@ -55,8 +55,8 @@ const SFX = (() => {
     resume() { const c = ac(); if (c && c.state === "suspended") c.resume(); },
     set(v) { on = v; },
     tick() { tone(880, 0.05, "square", 0.05); },                               // 倒數每秒
-    tension() { tone(150, 0.2, "sawtooth", 0.16); tone(160, 0.2, "sawtooth", 0.1, 0.02); }, // 怒氣飆升
-    buzzer() { tone(110, 0.5, "square", 0.22); tone(104, 0.5, "square", 0.18); },           // 爆表 / 時間到
+    tension() { tone(150, 0.22, "sawtooth", 0.32); tone(160, 0.22, "sawtooth", 0.22, 0.02); }, // 怒氣飆升(調大聲)
+    buzzer() { tone(110, 0.55, "square", 0.45); tone(104, 0.55, "square", 0.36); tone(70, 0.5, "sawtooth", 0.3, 0.01); }, // 爆表/時間到(更大聲+低頻轟)
     win() { tone(523, 0.12, "sine", 0.18); tone(659, 0.12, "sine", 0.18, 0.12); tone(784, 0.22, "sine", 0.18, 0.24); },
   };
 })();
@@ -265,7 +265,8 @@ function startShift(difficulty, fromId) {
   let start = 0;
   if (fromId) { const k = queue.findIndex((s) => s.scenario_id === fromId); if (k > 0) start = k; }
   const ordered = queue.slice(start).concat(queue.slice(0, start));
-  SHIFT = { diff: difficulty, queue: ordered, idx: 0, results: [] };
+  const sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "s" + Date.now() + Math.floor(Math.random() * 1e6);
+  SHIFT = { id: sid, diff: difficulty, queue: ordered, idx: 0, results: [] };
   const side = document.querySelector(".game-side");
   if (side) side.style.setProperty("--lvl", diffStyle(difficulty).grad);
   SFX.resume();   // 開局點擊=使用者手勢,趁機解鎖 AudioContext
@@ -280,7 +281,8 @@ async function startCustomer() {
   try {
     const d = await api("/api/start", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scenario_id: meta.scenario_id }),
+      body: JSON.stringify({ scenario_id: meta.scenario_id, shift_id: SHIFT.id,
+        shift_index: SHIFT.idx, shift_total: SHIFT.queue.length, shift_diff: SHIFT.diff }),
     });
     STATE = { thread: d.thread_id, maxTurns: d.max_turns, busy: false, ended: false, anger: d.anger,
       costSpent: 0, costBudget: d.cost_budget || 80, char: d.scenario.char || "" };
@@ -365,12 +367,15 @@ async function send() {
   STATE.busy = true; stopTurnTimer(); input.disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
   addMessage("user", text, "你"); input.value = "";
   const thinking = addMessage("bot thinking", "⌛ 思考中…");
+  // 一般回合 ~7s;若超過,通常是這回合要結束、後台正在跑評審報告 → 換個說明,讓久等變得合理
+  const reportHint = setTimeout(() => { if (thinking.isConnected) thinking.textContent = "📝 整理評審報告中…(評審較花時間)"; }, 7000);
   const prevAnger = STATE.anger;
   try {
     const d = await api("/api/say", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ thread_id: STATE.thread, text }),
     });
+    clearTimeout(reportHint);
     thinking.remove();
     addMessage("bot", d.ai_reply, "奧客");
     if (typeof d.cost_spent === "number") STATE.costSpent = d.cost_spent;
@@ -385,6 +390,7 @@ async function send() {
       finishCustomer(d);   // 收尾本客人 → 「下一位 / 看班次總結」
     } else { STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; input.focus(); startTurnTimer(); }
   } catch (e) {
+    clearTimeout(reportHint);
     thinking.remove(); toast(e.message);
     STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; input.value = text; input.focus();
   }
@@ -392,7 +398,7 @@ async function send() {
 
 // ---------- 語音輸入(MediaRecorder → /api/stt → 填進輸入框)----------
 // 設定:auto=靜音自動送出、sec=靜音幾秒;存 localStorage,左側面板可調。
-const VOICE = { auto: true, sec: 4 };
+const VOICE = { auto: true, sec: 2 };
 function loadVoiceSettings() {
   try { const s = JSON.parse(localStorage.getItem("okeke_voice") || "{}");
     if (typeof s.auto === "boolean") VOICE.auto = s.auto;
@@ -401,7 +407,7 @@ function loadVoiceSettings() {
 }
 function saveVoiceSettings() {
   VOICE.auto = $("#vs-auto").checked;
-  VOICE.sec = Math.max(1, Math.min(15, parseInt($("#vs-sec").value, 10) || 4));
+  VOICE.sec = Math.max(1, Math.min(15, parseInt($("#vs-sec").value, 10) || 2));
   $("#vs-sec-val").textContent = VOICE.sec;
   try { localStorage.setItem("okeke_voice", JSON.stringify(VOICE)); } catch {}
   updateVoiceUI();
@@ -597,6 +603,7 @@ function showShiftReport() {
       <button class="btn-ghost" id="r-close">關閉看對話</button>
     </div>`;
   $("#report").classList.remove("hidden");
+  $("#report-card").style.setProperty("--lvl", ds.grad);   // 分數條/卷軸條用本班次難度色
   $("#report-card").scrollTop = 0;
   $("#report-card").querySelectorAll(".srow-head").forEach((h) =>
     h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed")));
@@ -622,23 +629,48 @@ async function loadHistory() {
   const grid = $("#history-grid");
   try {
     const list = await api("/api/history");
-    grid.innerHTML = list.length ? "" : `<p style="color:var(--muted)">還沒有任何對局紀錄。</p>`;
+    if (!list.length) { grid.innerHTML = `<p style="color:var(--muted)">還沒有任何對局紀錄。</p>`; return; }
+    // 依 shift_id 把同一班次的客人聚成一組;舊紀錄(無 shift_id)各自成一組
+    const order = [], byId = {};
     list.forEach((g) => {
-      const st = styleFor((g.scenario_name || "").includes("劉董") ? "零售" : "餐飲");
-      const card = el(`
-        <div class="gcard" style="--accent:${st.grad}">
-          <div class="gcard-banner" style="background:${st.grad}">
-            <span class="pill-genre">${g.ending_label || g.ending_type}</span>
-            <span class="gcard-emoji">${st.emoji}</span>
-            <div class="gcard-name">${g.scenario_name || "?"}</div>
-          </div>
-          <div class="gcard-body">
-            <div class="gcard-meta"><span class="chip">${g.turns} 回合</span><span class="chip">最終憤怒 ${g.final_anger ?? "?"}</span></div>
-            <span class="gcard-cta">查看回放 →</span>
-            <p style="margin:0;font-size:.8rem;color:var(--dim)">${g.created_at || ""}</p>
-          </div>
-        </div>`);
-      card.addEventListener("click", () => viewHistory(g.thread_id));
+      const key = g.shift_id || ("solo_" + g.thread_id);
+      if (!byId[key]) { byId[key] = { items: [], created_at: g.created_at || "", difficulty: g.difficulty }; order.push(key); }
+      const grp = byId[key];
+      grp.items.push(g);
+      if ((g.created_at || "") > grp.created_at) grp.created_at = g.created_at || "";
+      if (!grp.difficulty && g.difficulty) grp.difficulty = g.difficulty;
+    });
+    grid.innerHTML = "";
+    order.forEach((key, gi) => {
+      const grp = byId[key];
+      grp.items.sort((a, b) => (a.shift_index ?? 0) - (b.shift_index ?? 0));
+      const ds = diffStyle(grp.difficulty);
+      const c = (t) => grp.items.filter((x) => x.ending_type === t).length;
+      const date = (grp.created_at || "").replace("T", " ").slice(0, 16);
+      const rows = grp.items.map((g) => {
+        const ava = g.char
+          ? `<img class="hrow-ava" src="/characters/neu_${g.char}.png" alt="" onerror="this.style.display='none'">`
+          : `<span class="hrow-ava">${styleFor(g.scenario_name || "").emoji}</span>`;
+        return `<button class="hrow" data-tid="${g.thread_id}">
+          ${ava}
+          <span class="hrow-name">${escapeHtml(g.scenario_name || "?")}</span>
+          <span class="hrow-meta">${g.turns} 回合 · 怒 ${g.final_anger ?? "?"}</span>
+          <span class="hrow-badge ${g.ending_type}">${g.ending_label || g.ending_type}</span>
+        </button>`;
+      }).join("");
+      const single = grp.items.length === 1;
+      const title = single ? escapeHtml(grp.items[0].scenario_name || "?")
+                           : `${ds.label}難度班次 · ${grp.items.length} 位客人`;
+      const card = el(`<div class="hgroup ${gi === 0 ? "" : "collapsed"}" style="--lvl:${ds.grad}">
+        <button class="hgroup-head">
+          <span class="hg-caret"></span>
+          <span class="hg-l"><span class="hg-title">${title}</span><span class="hg-sub">${date}</span></span>
+          <span class="hg-r">✓ ${c("success")}/${grp.items.length} 和解</span>
+        </button>
+        <div class="hgroup-body">${rows}</div>
+      </div>`);
+      card.querySelector(".hgroup-head").addEventListener("click", () => card.classList.toggle("collapsed"));
+      card.querySelectorAll(".hrow").forEach((r) => r.addEventListener("click", () => viewHistory(r.dataset.tid)));
       grid.appendChild(card);
     });
   } catch (e) { grid.innerHTML = `<p style="color:var(--muted)">載入失敗:${e.message}</p>`; }
@@ -668,11 +700,18 @@ async function viewHistory(threadId) {
       <div class="report-ending">對話回放 · ${d.ending_label || d.ending_type}</div>
       <div class="report-title">${escapeHtml(d.scenario_name || "")}</div>
       ${trajectorySVG(d.anger_history)}
-      <div class="report-h">對話紀錄</div>
-      <div class="transcript">${msgs || '<p style="color:var(--muted);margin:0">(無對話)</p>'}</div>
+      <details class="transcript-fold">
+        <summary>對話紀錄 · ${(d.transcript || []).length} 句(點開回放)</summary>
+        <div class="transcript">${msgs || '<p style="color:var(--muted);margin:0">(無對話)</p>'}</div>
+      </details>
       ${reportHtml}
       <div class="report-actions"><button class="btn-ghost" id="h-close">關閉</button></div>`;
     $("#hist-overlay").classList.remove("hidden");
+    // 分數條/卷軸條用該關卡難度色:優先記錄存的 difficulty,舊紀錄退而從關卡快取查
+    const _diff = d.difficulty || (SCENARIOS.find((s) => s.scenario_id === d.scenario_id) || {}).difficulty;
+    const _lvl = _diff && DIFF_STYLE[_diff] ? DIFF_STYLE[_diff].grad : null;
+    if (_lvl) $("#hist-card").style.setProperty("--lvl", _lvl);
+    else $("#hist-card").style.removeProperty("--lvl");
     $("#hist-card").scrollTop = 0;
     $("#h-close").onclick = () => $("#hist-overlay").classList.add("hidden");
     $("#hist-overlay").onclick = (e) => { if (e.target === $("#hist-overlay")) $("#hist-overlay").classList.add("hidden"); };

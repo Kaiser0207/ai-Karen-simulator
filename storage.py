@@ -22,12 +22,20 @@ def save_game(
     emotion_history: list[str],
     transcript: list[dict],
     report: dict,
+    shift_id: str | None = None,
+    shift_index: int | None = None,
+    shift_total: int | None = None,
 ) -> None:
     _LOG_DIR.mkdir(exist_ok=True)
     data = {
         "thread_id": thread_id,
         "scenario_id": scenario.get("scenario_id"),
         "scenario_name": scenario.get("name"),
+        "difficulty": scenario.get("difficulty"),   # 回放報告用關卡色畫分數條/卷軸條
+        "char": scenario.get("char"),               # 立繪頭像(歷史分組用)
+        "shift_id": shift_id,                        # 同一班次的客人共用,歷史頁聚成一組
+        "shift_index": shift_index,
+        "shift_total": shift_total,
         "ending_type": ending_type,
         "final_anger": anger_history[-1] if anger_history else None,
         "turns": len(emotion_history),
@@ -54,6 +62,11 @@ def list_games() -> list[dict]:
         items.append({
             "thread_id": d.get("thread_id", p.stem),
             "scenario_name": d.get("scenario_name", "?"),
+            "difficulty": d.get("difficulty"),
+            "char": d.get("char"),
+            "shift_id": d.get("shift_id"),
+            "shift_index": d.get("shift_index"),
+            "shift_total": d.get("shift_total"),
             "ending_type": d.get("ending_type", "?"),
             "turns": d.get("turns", 0),
             "final_anger": d.get("final_anger"),

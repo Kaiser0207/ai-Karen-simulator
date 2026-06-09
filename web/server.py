@@ -137,6 +137,11 @@ app = FastAPI(title="AI 奧客應對演練 API")
 
 class StartReq(BaseModel):
     scenario_id: str
+    # 班次資訊(多客人模式):讓歷史紀錄能把同一班次的客人聚成一組
+    shift_id: str | None = None
+    shift_index: int | None = None
+    shift_total: int | None = None
+    shift_diff: str | None = None
 
 
 class SayReq(BaseModel):
@@ -177,7 +182,9 @@ def api_start(req: StartReq):
     now = time.time()
     with _SESS_LOCK:
         _gc_sessions(now)
-        SESSIONS[sid] = {"init": init, "first": True, "scenario": init["scenario"], "last": now}
+        SESSIONS[sid] = {"init": init, "first": True, "scenario": init["scenario"], "last": now,
+                         "shift_id": req.shift_id, "shift_index": req.shift_index,
+                         "shift_total": req.shift_total}
     sc = init["scenario"]
     return {
         "thread_id": sid,
@@ -248,6 +255,8 @@ def api_say(req: SayReq):
             thread_id=req.thread_id, scenario=sess["scenario"], ending_type=result["ending_type"],
             anger_history=anger_history, emotion_history=emotion_history,
             transcript=transcript, report=result["report"],
+            shift_id=sess.get("shift_id"), shift_index=sess.get("shift_index"),
+            shift_total=sess.get("shift_total"),
         )
         with _SESS_LOCK:
             SESSIONS.pop(req.thread_id, None)

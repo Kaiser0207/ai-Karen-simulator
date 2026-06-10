@@ -13,7 +13,7 @@ from langgraph.graph.message import add_messages
 class GameState(TypedDict):
     # --- 關卡靜態設定(開局載入,整場不變) ---
     scenario_id: str
-    scenario: dict  # 完整關卡設定(含 ending_lines、avatar 等,供節點取用)
+    scenario: dict  # 完整關卡設定(含 ending_lines 等,供節點取用)
     system_prompt: str  # 組合後的奧客 system prompt(骨架模板 + 角色變數)
     max_turns: int  # 回合上限(如 8)
 

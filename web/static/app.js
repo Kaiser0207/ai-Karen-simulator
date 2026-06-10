@@ -508,7 +508,9 @@ async function send() {
     if (STATE.thread !== myThread) return;   // 已換關/已離開:整個丟棄,別寫進別人的對話
     STATE.voiceEmotion = null;               // 這句語氣已用掉(送成功);下一句若用打字就不帶
     thinking.remove();
-    addMessage("bot", d.ai_reply, "奧客");
+    // 一個奧客氣泡:結局回合顯示關卡「預設收尾台詞」(角色自帶、每關手寫的 ending_lines);
+    // 一般回合顯示奧客即時回話。二擇一 → 結局不再冒兩個奧客氣泡(健檢 L8)。
+    addMessage("bot", d.ended ? d.ending_line : d.ai_reply, "奧客");
     if (typeof d.cost_spent === "number") STATE.costSpent = d.cost_spent;
     if (typeof d.cost_budget === "number") STATE.costBudget = d.cost_budget;
     const disp = Math.min(100, d.anger + (STATE.penalty || 0));   // 疊加超時懲罰後的顯示怒氣
@@ -517,7 +519,7 @@ async function send() {
     STATE.serverAnger = d.anger; STATE.anger = disp; STATE.turn = d.turn;
     if (d.anger - prevAnger >= 12) SFX.tension();           // 怒氣一回合飆 ≥12 → 緊張音
     if (d.ended) {
-      STATE.ended = true; addMessage("bot", d.ending_line, "奧客");
+      STATE.ended = true;
       if (d.ending_type === "success") MUSIC.victory(SHIFT.idx);   // 和解 → 對應勝利曲一次
       else { MUSIC.stop(); SFX.buzzer(); }                          // 砸店/逾時 → 停戰鬥曲 + 爆表音
       finishCustomer(d);   // 收尾本客人 → 「下一位 / 看班次總結」
@@ -685,9 +687,9 @@ async function toggleMic() {
     let text = "";
     try {
       const fd = new FormData(); fd.append("audio", blob, "rec.webm");
-      const res = await fetch("/api/stt", { method: "POST", body: fd });
-      if (!res.ok) { let m = "辨識失敗"; try { m = (await res.json()).detail || m; } catch {} throw new Error(m); }
-      const d = await res.json();
+      // 走 api()(內建 AbortController 逾時)→ STT 後端卡住/網路停住時不會永遠卡在「辨識中…」,
+      // 逾時會丟錯走下面 catch,照常還原麥克風與輸入框(健檢 M5)。
+      const d = await api("/api/stt", { method: "POST", body: fd, timeoutMs: 60000 });
       text = d.text || "";
       if (text) {
         input.value = (input.value ? input.value + " " : "") + text;

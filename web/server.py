@@ -92,6 +92,12 @@ def _get_session(thread_id: str) -> dict | None:
     vals = getattr(snap, "values", None) if snap else None
     if not vals or not vals.get("scenario"):
         return None  # 從沒開始過 → 真的不存在
+    if vals.get("ended"):
+        # 已結束的對局:結束時 SESSIONS 已被 pop,但 checkpointer 仍永久保留這場 state。
+        # 若不擋,結束後同一 thread_id 再來一個 /api/say(連點/網路重送/多分頁)會被「還原成可繼續玩」,
+        # 於是再跑一次 graph → 又呼叫一次評審 LLM(白花額度)+ 覆寫並污染歷史紀錄。
+        # 已結束就當作「不存在」處理 → /api/say 回 404「工作階段不存在或已結束」。
+        return None
     recovered = {"first": False, "scenario": vals["scenario"], "last": now}
     with _SESS_LOCK:
         SESSIONS[thread_id] = recovered
@@ -242,21 +248,25 @@ def api_say(req: SayReq):
     }
 
     if resp["ended"]:
-        resp["ending_line"] = result["messages"][-1].content
-        resp["ending_label"] = ENDING_LABEL.get(result["ending_type"], result["ending_type"])
-        resp["report"] = result["report"]
+        # 防禦(健檢 M2):結束資料正常都齊全,但萬一 graph 回傳不完整(缺 report / messages 空),
+        # 改用 .get + 後備值優雅降級,而非直接索引崩成「裸 500」。正常流程行為不變。
+        messages = result.get("messages") or []
+        report = result.get("report") or {}
+        resp["ending_line"] = getattr(messages[-1], "content", "") if messages else "(對話結束。)"
+        resp["ending_label"] = ENDING_LABEL.get(resp["ending_type"], resp["ending_type"])
+        resp["report"] = report
         resp["anger_history"] = anger_history
         resp["emotion_history"] = emotion_history
         # 從 graph messages 重建逐句對話,存進歷史紀錄
         transcript = [
             {"role": "assistant" if type(m).__name__ == "AIMessage" else "user",
              "content": getattr(m, "content", "")}
-            for m in result["messages"]
+            for m in messages
         ]
         storage.save_game(
-            thread_id=req.thread_id, scenario=sess["scenario"], ending_type=result["ending_type"],
+            thread_id=req.thread_id, scenario=sess["scenario"], ending_type=resp["ending_type"],
             anger_history=anger_history, emotion_history=emotion_history,
-            transcript=transcript, report=result["report"],
+            transcript=transcript, report=report,
             shift_id=sess.get("shift_id"), shift_index=sess.get("shift_index"),
             shift_total=sess.get("shift_total"),
         )

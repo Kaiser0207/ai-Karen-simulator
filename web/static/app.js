@@ -407,7 +407,7 @@ async function startCustomer() {
     });
     if (SHIFT !== myShift) return;             // 已換關/已離開:整個丟棄
     STATE = { thread: d.thread_id, maxTurns: d.max_turns, turn: d.turn || 0, busy: false, ended: false, anger: d.anger,
-      serverAnger: d.anger, penalty: 0,   // penalty:超時累積的怒氣懲罰(顯示用,疊加在 AI 給的怒氣上)
+      serverAnger: d.anger,
       costSpent: 0, costBudget: d.cost_budget || 80, char: d.scenario.char || "" };
     preloadFaces(STATE.char);                             // 先預載 5 張表情 → 後續換臉不卡
     const ds = diffStyle(d.scenario.difficulty);          // 本關顏色以難度為準(藍簡/粉中/綠難)
@@ -513,7 +513,7 @@ async function send() {
     addMessage("bot", d.ended ? d.ending_line : d.ai_reply, "奧客");
     if (typeof d.cost_spent === "number") STATE.costSpent = d.cost_spent;
     if (typeof d.cost_budget === "number") STATE.costBudget = d.cost_budget;
-    const disp = Math.min(100, d.anger + (STATE.penalty || 0));   // 疊加超時懲罰後的顯示怒氣
+    const disp = d.anger;   // 顯示怒氣一律以伺服器為準(不再疊加假的超時懲罰,避免血條/立繪與實際勝負不符)
     updateMeter(disp, d.turn, d.max_turns);
     setOkekeFace(emotionForAnger(disp));   // 立繪換臉:以怒氣為準(怒氣0=最開心),不靠 LLM 自報情緒
     STATE.serverAnger = d.anger; STATE.anger = disp; STATE.turn = d.turn;
@@ -625,17 +625,39 @@ function onTimerExpire() {
   SFX.buzzer();
   const input = $("#msg"), text = (input.value || "").trim();
   if (text && !STATE.busy && !STATE.ended && STATE.thread) { send(); return; }  // 有打字 → 直接送出
-  // 沒打字 → 視為冷場,加怒氣懲罰(顯示用,疊加在 AI 怒氣上)+ 催促 + 重新計時
+  // 沒打字 → 視為冷場:呼叫後端讓顧客「真的」更生氣(怒氣 +10),到 100 真的砸店
   if (!STATE.busy && !STATE.ended && STATE.thread) {
-    STATE.penalty = (STATE.penalty || 0) + 10;
-    const disp = Math.min(100, (STATE.serverAnger != null ? STATE.serverAnger : STATE.anger) + STATE.penalty);
-    STATE.anger = disp;
-    updateMeter(disp, STATE.turn, STATE.maxTurns);
-    setOkekeFace(emotionForAnger(disp));
-    toast("⏰ 時間到!你乾在那發呆,顧客更火了(怒氣 +10)");
-    startTurnTimer();
+    applyStall();
   } else {
     toast("⏰ 時間到!快回應奧客!");
+  }
+}
+
+// 超時冷場 → 呼叫 /api/stall,讓顧客的「真實怒氣」+10(寫進後端);到 100 觸發砸店。不再只是畫面假裝。
+async function applyStall() {
+  const myThread = STATE.thread;
+  try {
+    const d = await api("/api/stall", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thread_id: myThread }), timeoutMs: 30000,
+    });
+    if (STATE.thread !== myThread) return;            // 已換關/離開 → 丟棄
+    STATE.serverAnger = d.anger; STATE.anger = d.anger;
+    updateMeter(d.anger, d.turn ?? STATE.turn, d.max_turns ?? STATE.maxTurns);
+    setOkekeFace(emotionForAnger(d.anger));
+    if (d.ended) {                                    // 爆表 → 砸店收尾
+      STATE.ended = true;
+      addMessage("bot", d.ending_line, "奧客");
+      MUSIC.stop(); SFX.buzzer();
+      finishCustomer(d);
+    } else {
+      toast("⏰ 時間到!你乾在那發呆,顧客真的更火了(怒氣 +10)");
+      startTurnTimer();                               // 還沒爆 → 繼續計時施壓
+    }
+  } catch (e) {
+    if (STATE.thread !== myThread) return;
+    toast(e.message);
+    if (!STATE.ended && STATE.thread) startTurnTimer();   // 失敗別卡死,繼續計時
   }
 }
 

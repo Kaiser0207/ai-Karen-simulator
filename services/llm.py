@@ -331,20 +331,30 @@ def _judge_system_prompt() -> str:
     return _JUDGE_TEMPLATE
 
 
+def _is_rate_limited(err) -> bool:
+    """是否為 429 / 限流 / 額度耗盡。這類錯誤短時間重抽沒用(供應商常要求等數十秒),
+    應立刻往外拋交給上層(web 層)處理,而不是在這裡空轉浪費呼叫次數與時間。"""
+    return any(k in str(err).lower()
+               for k in ("429", "resource_exhausted", "exhausted", "quota", "rate limit", "rate_limit"))
+
+
 def _invoke_structured(model, msgs):
     """呼叫已綁定 with_structured_output 的模型,解析失敗(格式不符 schema)時退避重試幾次。
 
     與 web 層的「暫時性錯誤(429)重試」分工不同:這裡專處理「回傳格式不符 Pydantic schema」
     的情況(LLM 隨機性導致),同一 prompt 重抽通常即可成功;全失敗才往外拋,由呼叫端決定後備。
+    ★ 429/限流/額度不在此重抽 —— 重抽 1.8 秒注定失敗,只會空燒額度與時間 → 立刻往外拋。
     """
     last = None
     for i in range(_STRUCT_ATTEMPTS):
         try:
             return model.invoke(msgs)
-        except Exception as err:  # noqa: BLE001 解析/驗證錯誤皆重試
+        except Exception as err:  # noqa: BLE001
             last = err
+            if _is_rate_limited(err):
+                raise  # 429/限流:重抽無用,立刻往外拋(web 層只會再重試一次)
             if i < _STRUCT_ATTEMPTS - 1:
-                time.sleep(0.6 * (i + 1))
+                time.sleep(0.6 * (i + 1))  # 僅格式/解析錯誤才退避重抽
     raise last
 
 
@@ -370,7 +380,7 @@ def _real_customer_turn(system_prompt, anger, messages, player_input, voice_emot
     except Exception as err:  # noqa: BLE001
         # 限流/額度耗盡(429 RESOURCE_EXHAUSTED)→ 往外拋,讓 web 層回友善訊息
         # 「AI 服務暫時達到使用上限,請稍候幾秒再送一次」,不要吞成莫名的沉默台詞
-        if any(k in str(err).lower() for k in ("429", "resource_exhausted", "exhausted", "quota", "rate limit", "rate_limit")):
+        if _is_rate_limited(err):
             raise
         # 其餘(解析/格式)失敗:不讓玩家卡死,回中性台詞、不動憤怒值,遊戲可繼續
         logger.warning("奧客大腦結構化輸出重試後仍失敗,改用中性後備台詞:%s", err)

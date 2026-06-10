@@ -28,6 +28,7 @@ from starlette.concurrency import run_in_threadpool
 
 import config
 import storage
+from graph import nodes
 from graph.build import build_graph
 from scenarios import loader
 from services import ser_client, stt
@@ -51,6 +52,11 @@ def _graph_invoke(payload, cfg):
 def _graph_get_state(cfg):
     with _DB_LOCK:
         return GRAPH.get_state(cfg)
+
+
+def _graph_update_state(cfg, values):
+    with _DB_LOCK:
+        return GRAPH.update_state(cfg, values)
 
 
 # STT 語音輸入:啟動就背景預載模型(不擋啟動),讓第一次錄音不卡。STT_WARMUP=0 可關。
@@ -154,6 +160,14 @@ class SayReq(BaseModel):
     thread_id: str
     text: str
     voice_emotion: str | None = None   # 玩家語氣(SER;前端語音輸入帶上,打字則 None)
+
+
+class StallReq(BaseModel):
+    thread_id: str
+
+
+# 超時冷場懲罰:計時器到、玩家沒回應 → 顧客「真的」更生氣(伺服器怒氣 +此值)
+_STALL_PENALTY = 10
 
 
 @app.get("/api/scenarios")
@@ -273,6 +287,80 @@ def api_say(req: SayReq):
         with _SESS_LOCK:
             SESSIONS.pop(req.thread_id, None)
     return resp
+
+
+@app.post("/api/stall")
+def api_stall(req: StallReq):
+    """超時冷場:讓顧客的『真實怒氣』+10(寫進 graph state),到 100 就真的砸店。
+
+    不耗回合、不呼叫奧客 LLM,只更新 anger。爆表時重用 graph 的 set_ending/judge 節點收尾,
+    確保砸店的結局台詞與評審報告(含成本控制分)跟正常砸店完全一致,不另寫一套。
+    """
+    sess = _get_session(req.thread_id)
+    if not sess:
+        raise HTTPException(404, "工作階段不存在或已結束,請重新開始一場。")
+    cfg = {"configurable": {"thread_id": req.thread_id}}
+    snap = _graph_get_state(cfg)
+    vals = (getattr(snap, "values", None) or {}) if snap else {}
+    if vals.get("ended"):
+        raise HTTPException(409, "本場已結束。")
+
+    # 還沒打第一句時 graph 尚無狀態(state 要等第一次 /api/say 才寫入 checkpointer)→ 改以
+    # session 的開局 state 為準。否則開局還沒打字就超時會被誤判成「已結束」。
+    has_state = bool(vals)
+    base = vals if has_state else (sess.get("init") or {})
+    if not base:
+        raise HTTPException(409, "本場尚未開始或已結束。")
+
+    anger = int(base.get("anger", 0) or 0)
+    new_anger = min(100, anger + _STALL_PENALTY)
+    if new_anger < 100:
+        if has_state:
+            _graph_update_state(cfg, {"anger": new_anger})        # 已開打 → 寫進 graph state
+        else:
+            # 還沒打第一句 → 把怒氣加在 session 開局 state,第一句送出時就會帶上(真實生效)
+            with _SESS_LOCK:
+                s = SESSIONS.get(req.thread_id)
+                if s and s.get("init"):
+                    s["init"]["anger"] = new_anger
+                    s["init"]["anger_history"] = [new_anger]
+        return {"anger": new_anger, "ended": False,
+                "turn": base.get("turn", 0), "max_turns": base.get("max_turns", 8)}
+
+    # 爆表 → 砸店收尾(重用 graph 節點,報告/成本算法與正常砸店一致;has_state 與否都以 base 為基底)
+    fail_state = {**base, "anger": 100, "ending_type": "fail"}
+    end_out = nodes.set_ending(fail_state)                       # 取 fail 結局台詞 + emotion
+    full_messages = list(base.get("messages") or []) + list(end_out["messages"])
+    anger_hist = list(base.get("anger_history") or []) + [100]   # 補上爆表的 100(給評審/存檔)
+    emo_hist = list(base.get("emotion_history") or []) + ["angry"]
+    report = nodes.judge({**base, "anger": 100, "ending_type": "fail",
+                          "messages": full_messages, "anger_history": anger_hist})["report"]
+    if has_state:
+        # 持久化結束狀態(messages 用 add_messages reducer → 自動追加結局台詞)
+        _graph_update_state(cfg, {"anger": 100, "ended": True, "ending_type": "fail",
+                                  "emotion": "angry", "messages": end_out["messages"]})
+    # (還沒打第一句就爆表:不寫 checkpointer;session pop 後 _get_session 回 None→404,一樣擋住重送)
+    transcript = [
+        {"role": "assistant" if type(m).__name__ == "AIMessage" else "user",
+         "content": getattr(m, "content", "")}
+        for m in full_messages
+    ]
+    storage.save_game(
+        thread_id=req.thread_id, scenario=sess["scenario"], ending_type="fail",
+        anger_history=anger_hist, emotion_history=emo_hist,
+        transcript=transcript, report=report,
+        shift_id=sess.get("shift_id"), shift_index=sess.get("shift_index"),
+        shift_total=sess.get("shift_total"),
+    )
+    with _SESS_LOCK:
+        SESSIONS.pop(req.thread_id, None)
+    return {
+        "anger": 100, "ended": True, "ending_type": "fail",
+        "ending_line": getattr(end_out["messages"][-1], "content", ""),
+        "ending_label": ENDING_LABEL.get("fail", "fail"),
+        "report": report, "anger_history": anger_hist, "emotion_history": emo_hist,
+        "turn": base.get("turn", 0), "max_turns": base.get("max_turns", 8),
+    }
 
 
 @app.get("/api/history")

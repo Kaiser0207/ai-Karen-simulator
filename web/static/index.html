@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700;800;900&family=Syne:wght@600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700;900&family=Noto+Serif+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/style.css?v=5" />
 </head>
 <body>
   <!-- ── 頂部導覽(AKARU 風:彩點 + 粗體)── -->
@@ -114,7 +114,27 @@
         </div>
         <div class="voice-hint" id="vs-hint">關閉則改「按一下開始、再按一下結束」手動送出。</div>
       </div>
-      <div class="report-actions"><button class="btn-ghost" id="set-close">關閉</button></div>
+      <div class="report-actions">
+        <button class="btn-ghost full" id="open-howto">📖 操作說明</button>
+        <button class="btn-ghost full" id="set-close">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 操作說明(首次進關卡自動彈一次;之後設定可再看)── -->
+  <div id="howto-overlay" class="report-overlay hidden">
+    <div class="report-card howto-card">
+      <div class="report-ending">HOW TO PLAY · 操作說明</div>
+      <h3 class="howto-title">怎麼玩?</h3>
+      <ul class="howto-list">
+        <li><span class="ic">🎯</span><div><b>目標</b> —— 你是店員,在<b>有限回合</b>內安撫眼前的奧客。</div></li>
+        <li><span class="ic">⌨️</span><div><b>怎麼回應</b> —— 直接打字,或按 🎤 用<b>語音</b>說話,再按「送出」。</div></li>
+        <li><span class="ic">🎙️</span><div><b>語氣會影響結果</b> —— 用語音時系統會偵測你的語氣(平穩/不耐/緊張…),<b>連帶影響奧客反應</b>;你的對話泡泡下會標出偵測到的語氣。</div></li>
+        <li><span class="ic">😠</span><div><b>三種結局</b> —— 憤怒爆表=砸店(失敗)、提出好方案讓 AI 判定<b>和解=成功</b>、回合用完=超時。</div></li>
+        <li><span class="ic">📋</span><div><b>班次 &amp; 評審</b> —— 同難度會連續服務多位客人,結束後有 <b>AI 評審報告</b> 與班次總結。</div></li>
+        <li><span class="ic">⚙️</span><div><b>設定</b> —— 可開回合倒數、語音自動送出、背景音樂;<small>本說明日後也能在「設定」裡再看。</small></div></li>
+      </ul>
+      <div class="report-actions"><button class="btn-red" id="howto-close">開始挑戰 →</button></div>
     </div>
   </div>
 
@@ -125,6 +145,6 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=5"></script>
 </body>
 </html>

@@ -256,6 +256,14 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
 .msg.bot { align-self: flex-start; background: var(--cream); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
 .msg.user { align-self: flex-end; background: var(--ink); color: #F0EAD6; border-bottom-right-radius: 6px; }
 .msg.thinking { color: var(--dim); font-style: italic; }
+/* 泡泡常駐語氣標籤(語音輸入才有;顏色分類 → demo 一眼對照奧客反應)。在「你」泡泡內換行靠右 */
+.tone-badge { display: block; width: fit-content; margin: 9px 0 1px auto; padding: 5px 12px; border-radius: 999px;
+  font-family: var(--f-mono); font-size: 11.5px; font-weight: 700; letter-spacing: .03em; color: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,.3); animation: pop .3s ease; }
+.tone-badge.tone-angry   { background: #d9534f; }
+.tone-badge.tone-happy   { background: #3f9c6c; }
+.tone-badge.tone-neutral { background: #7e8893; }
+.tone-badge.tone-anxious { background: #c9952f; }
 .composer { display: flex; gap: 10px; margin-top: 14px; }
 .composer input { flex: 1; font-family: var(--f-body); font-size: 1rem; color: var(--ink);
   background: var(--card); border: 1px solid var(--border-2); border-radius: 999px; padding: 13px 20px; outline: none;
@@ -338,7 +346,16 @@ body { margin: 0; background: var(--cream-deep); color: var(--ink);
   border: 3px solid var(--card); background-clip: padding-box; }
 .report-card.settings-modal::-webkit-scrollbar-track { margin: 22px 0; }   /* 設定無外框,保留留白避圓角 */
 /* 設定 modal:窄一點、卡片直排留間距 */
-.report-card.settings-modal { --lvl: #798e7b; width: min(92vw, 480px); display: flex; flex-direction: column; gap: 16px; }  /* 設定用綠色(對應 nav 綠點):滑桿/勾選/卷軸皆綠 */
+.report-card.settings-modal { --lvl: #798e7b; width: min(92vw, 480px); display: flex; flex-direction: column; gap: 13px; padding: 24px 30px 20px; }  /* 設定用綠色(對應 nav 綠點):滑桿/勾選/卷軸皆綠;緊湊排版免卷軸 */
+.settings-modal .report-actions { margin-top: 6px; padding-top: 14px; }   /* 設定底部按鈕收緊 → 不超出視窗 */
+/* 操作說明 modal:首次進關卡彈出 / 設定可再看 */
+.report-card.howto-card { --lvl: #6f86b6; width: min(92vw, 520px); display: flex; flex-direction: column; gap: 14px; }
+.howto-title { font-family: var(--f-head); font-weight: 800; font-size: 1.55rem; margin: 0; color: var(--ink); }
+.howto-list { list-style: none; padding: 0; margin: 2px 0; display: flex; flex-direction: column; gap: 14px; }
+.howto-list li { display: flex; gap: 12px; align-items: flex-start; font-size: .96rem; line-height: 1.55; color: var(--muted); }
+.howto-list li b { color: var(--ink); }
+.howto-list li small { color: var(--dim); }
+.howto-list .ic { flex: none; width: 30px; text-align: center; font-size: 1.35rem; line-height: 1.4; }
 .report-ending { font-family: var(--f-mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
 .report-score { font-family: var(--f-num); font-size: 5rem; line-height: 1; color: var(--red); }
 .report-score small { font-size: 1.3rem; color: var(--dim); }

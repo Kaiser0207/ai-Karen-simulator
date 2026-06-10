@@ -23,6 +23,12 @@ const diffStyle = (d) => DIFF_STYLE[d] || DIFF_STYLE.normal;
 const FACE = { angry: "😡", annoyed: "😠", neutral: "😐", calm: "🙂", happy: "😄" };
 // 玩家語氣(SER 4 類)→ 顯示;送給奧客大腦影響反應
 const TONE_LABEL = { Angry: "你的語氣:失控/不耐", Happy: "你的語氣:輕鬆有溫度", Neutral: "你的語氣:平穩", Anxious: "你的語氣:緊張/沒底氣" };
+// 泡泡常駐語氣標籤(顏色分類,demo 一眼對照奧客反應)
+const TONE_BADGE = { Angry: { cls: "angry", txt: "失控/不耐" }, Happy: { cls: "happy", txt: "輕鬆有溫度" }, Neutral: { cls: "neutral", txt: "平穩" }, Anxious: { cls: "anxious", txt: "緊張/沒底氣" } };
+function attachTone(node, emotion) {
+  const b = TONE_BADGE[emotion]; if (!node || !b) return;
+  node.appendChild(el(`<span class="tone-badge tone-${b.cls}">🎙️ 語氣 · ${b.txt}</span>`));
+}
 const FACE_PREFIX = { angry: "ang", annoyed: "annoy", neutral: "neu", calm: "calm", happy: "hap" };
 const emotionForAnger = (a) => (a >= 80 ? "angry" : a >= 55 ? "annoyed" : a >= 30 ? "neutral" : a >= 10 ? "calm" : "happy");
 function setOkekeFace(emotion) {
@@ -80,6 +86,7 @@ const MUSIC = (() => {
   let on = true, cur = null, key = null, vol = 0.45;
   let duckS = false, duckV = false;   // 兩個獨立壓低來源:設定開啟、歷史頁;任一成立就壓低
   const DUCK_RATIO = 0.12;   // 壓低時 = 主音量的 12%(隨音量滑桿一起縮放,不是固定值)
+  const MASTER = 0.6;        // 全域主衰減:整體再小聲一點(所有輸出 ×此值;要更大/更小只調這顆)
   const ducked = () => duckS || duckV;
   // 目前該播的背景音量:壓低時用「主音量 × DUCK_RATIO」,否則用該軌 base(預設=主音量)
   const bgTarget = (base) => (ducked() ? vol * DUCK_RATIO : (base != null ? base : vol));
@@ -93,18 +100,19 @@ const MUSIC = (() => {
   const url = (f) => "/music/" + encodeURIComponent(f);
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const cache = {};
-  function getAudio(f) {   // 同檔重用同一個 <audio>(已 buffer)→ 再播放瞬間切、迴圈接得緊
+  function getAudio(f) {   // 同檔重用同一個 <audio>;preload="none" → 不在進站/進關時搶頻寬
+    // (慢網路/VS Code 埠轉發下,一次預載多個大 mp3 會佔滿瀏覽器 6 連線、把 /api/start 跟立繪卡在後面)
     let a = cache[f];
-    if (!a) { a = new Audio(url(f)); a.preload = "auto"; try { a.load(); } catch {} cache[f] = a; }
+    if (!a) { a = new Audio(url(f)); a.preload = "none"; cache[f] = a; }   // 改成 play() 時才串流
     return a;
   }
   function preload(list) { (list || []).forEach(getAudio); }
   function fade(a, to, ms, done) {
     if (!a) { if (done) done(); return; }
     if (a._fid) clearInterval(a._fid);
-    const from = a.volume, steps = Math.max(1, Math.round(ms / 40)); let i = 0;
+    const from = a.volume, toA = clamp01(to * MASTER), steps = Math.max(1, Math.round(ms / 40)); let i = 0;
     a._fid = setInterval(() => {
-      i++; a.volume = clamp01(from + (to - from) * (i / steps));
+      i++; a.volume = clamp01(from + (toA - from) * (i / steps));
       if (i >= steps) { clearInterval(a._fid); a._fid = null; if (done) done(); }
     }, 40);
   }
@@ -138,14 +146,14 @@ const MUSIC = (() => {
   return {
     set(v) { on = v; if (!on) this.stop(); },
     isOn() { return on; },
-    setVolume(v) { vol = clamp01(v); if (cur && key !== "victory") { cur._base = vol; fade(cur, vol, 100); } },   // 預覽:直接到 vol(忽略壓低)→ 在設定裡拖就聽得到
+    setVolume(v) { vol = clamp01(v); if (cur && key !== "victory") { cur._base = vol; if (cur._fid) { clearInterval(cur._fid); cur._fid = null; } cur.volume = clamp01(vol * MASTER); } },   // 預覽:即時設真實音量(忽略壓低、先清掉進行中的淡入避免被蓋回)→ 在設定裡拖立刻聽到、不會偶發「調不動」
     getVolume() { return vol; },
     preloadLobby() { preload(F.lobby); },
     preloadBattle() { preload(F.battle.concat(F.victory)); },   // 進關卡前先 buffer 整班戰鬥/勝利曲
     lobby() { if (!on) { key = "lobby"; return; } if (key === "lobby" && cur && !cur.paused) return; key = "lobby"; lobbyNext(null); },
     battle(i) { key = "battle"; if (!on) return; start(F.battle[idx3(i)], true, vol, 400); },
     victory(i) { key = "victory"; if (!on) return; start(F.victory[idx3(i)], false, Math.min(1, vol + 0.12), 250); },
-    healed() { if (!on) return; try { const a = getAudio(F.healed); a.loop = false; a.volume = clamp01(bgTarget(vol) + vol * 0.35); try { a.currentTime = 0; } catch {} a.play().catch(() => {}); } catch {} },   // 跟主音量一起縮放,且固定高背景一截
+    healed() { if (!on) return; try { const a = getAudio(F.healed); a.loop = false; a.volume = clamp01((bgTarget(vol) + vol * 0.35) * MASTER); try { a.currentTime = 0; } catch {} a.play().catch(() => {}); } catch {} },   // 跟主音量一起縮放 ×主衰減,且固定高背景一截
     duckSettings(d) { duckS = d; applyDuck(); },   // 設定開啟 → 壓低
     duckView(d) { duckV = d; applyDuck(); },        // 歷史頁 → 壓低
     stop() { key = null; const old = cur; cur = null; stopEl(old, 350); },
@@ -383,6 +391,7 @@ function startShift(difficulty, fromId) {
   $("#report").classList.add("hidden");
   syncReopenBtn();   // 新班次 results 為空 → 隱藏舊的捷徑
   showView("game");
+  maybeShowHowto();   // 首次進關卡彈出操作說明(只一次;之後設定可再看)
   startCustomer();
 }
 
@@ -486,6 +495,7 @@ async function send() {
   const ve = STATE.voiceEmotion || null;   // 這句的語氣(語音才有;打字為 null)
   STATE.busy = true; stopTurnTimer(); input.disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
   const userNode = addMessage("user", text, "你"); input.value = "";
+  attachTone(userNode, ve);   // 語音語氣 → 泡泡下常駐標籤(demo 對照奧客反應)
   // 只在「這回合是最後一回合(結束會跑評審報告)」才顯示報告字樣,避免一般慢回合(如限流)誤判
   const willEnd = (STATE.turn + 1) >= STATE.maxTurns;
   const thinking = addMessage("bot thinking", willEnd ? "📝 整理評審報告中…(評審較花時間)" : "⌛ 思考中…");
@@ -885,6 +895,28 @@ function openSettings() { $("#settings-overlay").classList.remove("hidden"); SFX
 function closeSettings() { if ($("#settings-overlay").classList.contains("hidden")) return; $("#settings-overlay").classList.add("hidden"); MUSIC.duckSettings(false); }  // 關設定:解除「設定壓低」(若在歷史頁仍由 duckView 壓著)
 $("#set-close").addEventListener("click", closeSettings);
 $("#settings-overlay").addEventListener("click", (e) => { if (e.target === $("#settings-overlay")) closeSettings(); });
+// 操作說明:首次進關卡自動彈一次(localStorage 記住);之後在設定裡可再看
+// 從設定開→按鈕「返回設定」並回到設定;關卡自動彈→按鈕「開始挑戰」單純關閉
+let _howtoFromSettings = false;
+function openHowto(fromSettings) {
+  _howtoFromSettings = !!fromSettings;
+  const btn = $("#howto-close"); if (btn) btn.textContent = _howtoFromSettings ? "← 返回設定" : "開始挑戰 →";
+  $("#howto-overlay").classList.remove("hidden");
+}
+function closeHowto() {
+  $("#howto-overlay").classList.add("hidden");
+  const back = _howtoFromSettings; _howtoFromSettings = false;
+  if (back) openSettings();   // 從設定進來的 → 退回設定
+}
+function maybeShowHowto() {
+  let seen = false; try { seen = localStorage.getItem("okeke_seen_howto") === "1"; } catch {}
+  if (seen) return;
+  openHowto(false);
+  try { localStorage.setItem("okeke_seen_howto", "1"); } catch {}
+}
+$("#howto-close").addEventListener("click", closeHowto);
+$("#open-howto").addEventListener("click", () => { closeSettings(); openHowto(true); });
+$("#howto-overlay").addEventListener("click", (e) => { if (e.target === $("#howto-overlay")) closeHowto(); });
 $(".brand").addEventListener("click", () => showView("select"));
 $("#send").addEventListener("click", send);
 $("#mic").addEventListener("click", toggleMic);
@@ -916,13 +948,14 @@ loadBgmSetting();
 // 音樂音量(設定可調;存 localStorage)
 function loadMusicVol() {
   let v = 45;
-  try { const s = localStorage.getItem("okeke_bgm_vol"); if (s !== null) v = Math.max(0, Math.min(100, parseInt(s, 10) || 45)); } catch {}
+  try { const s = localStorage.getItem("okeke_bgm_vol"); if (s !== null) { const n = parseInt(s, 10); if (!Number.isNaN(n)) v = Math.max(0, Math.min(100, n)); } } catch {}
   const sl = $("#bgm-vol"); if (sl) { sl.value = v; sl.style.setProperty("--fill", v + "%"); }
   const lab = $("#bgm-vol-val"); if (lab) lab.textContent = v;
   MUSIC.setVolume(v / 100);
 }
 function saveMusicVol() {
-  const v = Math.max(0, Math.min(100, parseInt($("#bgm-vol").value, 10) || 45));
+  const n = parseInt($("#bgm-vol").value, 10);
+  const v = Math.max(0, Math.min(100, Number.isNaN(n) ? 45 : n));
   $("#bgm-vol-val").textContent = v;
   $("#bgm-vol").style.setProperty("--fill", v + "%");
   MUSIC.setVolume(v / 100);

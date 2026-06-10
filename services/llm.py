@@ -48,16 +48,26 @@ def customer_turn(system_prompt: str, anger: int, messages: list, player_input: 
     return _real_customer_turn(system_prompt, anger, messages, player_input, voice_emotion)
 
 
-# 玩家「語氣」(SER 4 類)→ 給奧客大腦的指引:讓「怎麼說」也影響 anger_change。
-# 設計原則:語氣作為「乘數/修正」疊在用詞判斷上,不直接蓋過內容(交給 LLM 綜合)。
+# 玩家「語氣」(SER 4 類)→ 給奧客大腦的指引。
+# 設計原則:語氣不只影響 anger_change 的數字,更要改變奧客「怎麼回話、用什麼策略反應」——
+# 同樣的內容、店員語氣不同 → 奧客的口吻與應對要明顯不一樣,才不會每次反應都同一套。
+# 每條規則含兩部分:① 情緒影響(調 anger_change)②反應方式(調 reply 的口吻與策略)。
 _VOICE_TONE_RULE = {
-    "Angry":   "店員『語氣聽起來很火大/不耐煩/兇』:就算用詞客氣,你也覺得他口氣差、沒誠意 → "
-               "安撫效果大打折,anger_change 明顯往上修(降幅砍半,甚至由負轉正小漲)。",
-    "Anxious": "店員『語氣聽起來緊張、心虛、沒底氣』:你會覺得他不夠專業、可以再施壓 → "
-               "安撫效果稍打折(降幅縮小),別太快消氣。",
-    "Happy":   "店員『語氣聽起來輕鬆、真誠、有溫度』:你更容易感受到善意 → "
-               "若同時用詞得體,安撫效果加成(降幅再放大一點)。",
-    "Neutral": "店員『語氣平穩中性』:照用詞內容正常評估即可,語氣不額外加減。",
+    "Angry":   "店員『語氣聽起來很火大/不耐煩/兇』:你被他的口氣激到,心想『我才是客人,你還兇我?』。\n"
+               "  ① 情緒:就算用詞客氣,你也覺得他口氣差、沒誠意 → 安撫效果大打折,anger_change 明顯往上修"
+               "(降幅砍半,甚至由負轉正小漲)。\n"
+               "  ② 反應:回嗆他的態度本身(『你這什麼口氣?』『兇屁啊』)、拿服務態度反將一軍、"
+               "要求換人或叫主管出來,而不是只回應事情本身。",
+    "Anxious": "店員『語氣聽起來緊張、心虛、結巴、沒底氣』:你嗅到他的不確定,覺得有機可乘、可以再凹。\n"
+               "  ① 情緒:安撫效果稍打折(降幅縮小),別太快消氣。\n"
+               "  ② 反應:得寸進尺、加碼要求,追問『你到底處不處理得了?』『你做得了主嗎?是不是新來的?』,"
+               "用施壓逼他讓更多。",
+    "Happy":   "店員『語氣聽起來輕鬆、真誠、有溫度、有耐心』:你比較容易感受到善意,火氣自然消一些。\n"
+               "  ① 情緒:若同時用詞得體,安撫效果加成(降幅再放大一點)。\n"
+               "  ② 反應:口氣軟下來,但仍保留一點面子或懷疑——半信半疑試探『那你說要怎麼處理?』、"
+               "順著台階下但提個小條件,而不是立刻笑臉相迎。",
+    "Neutral": "店員『語氣平穩中性、公事公辦』:語氣不額外加減 anger_change。\n"
+               "  ② 反應:把焦點放在他講的『內容』有沒有真的解決你的問題,沒解決就繼續盧、追問具體做法。",
 }
 
 
@@ -65,8 +75,9 @@ def _voice_note(voice_emotion: str | None) -> str | None:
     rule = _VOICE_TONE_RULE.get(voice_emotion or "")
     if not rule:
         return None
-    return (f"【店員此句的語氣(語音情緒辨識,辨的是『怎麼說』而非字面)】聽起來是 {voice_emotion}。{rule} "
-            "請把語氣當成內容判斷之上的修正,綜合給出 anger_change,別只看字面用詞。")
+    return (f"【店員此句的語氣(語音情緒辨識,辨的是『怎麼說』而非字面)】聽起來是 {voice_emotion}。\n{rule}\n"
+            "請把語氣當成『內容判斷之上的修正』:不只調整 anger_change,也要讓你的 reply 口吻與應對策略隨之改變——"
+            "同樣狀況、店員語氣不同,你的回話方式就該明顯不一樣;別每次都用同一套句型,挑最符合當下語氣的角度回應。")
 
 
 def judge_report(messages: list, ending_type: str | None = None,
@@ -246,6 +257,23 @@ def _text(m) -> str:
     return getattr(m, "content", "")
 
 
+def _format_transcript(messages) -> str:
+    """把整場對話攤平成「店員:… / 奧客:…」的純文字逐句記錄,給真實評審用。
+
+    為何不直接把 messages 以原生角色(human=店員、ai=奧客)丟給評審:assistant/ai 訊息會被
+    評審 LLM 誤當成「自己或受評者講的話」,把奧客的兇台詞歸到店員頭上(實測 fail 場、且奧客比
+    店員更兇時最常發作,對店員最不公平)。攤平並標明說話者後,角色歸屬不再有歧義。
+    """
+    lines = []
+    for m in messages:
+        text = _text(m)
+        if not text:
+            continue
+        speaker = "店員" if _role(m) == "human" else "奧客"
+        lines.append(f"{speaker}:{text}")
+    return "\n".join(lines)
+
+
 # ====================================================================
 # 評審情境補充(讓評審知道勝負與憤怒軌跡)
 # ====================================================================
@@ -353,13 +381,19 @@ def _real_customer_turn(system_prompt, anger, messages, player_input, voice_emot
 
 
 def _real_judge_report(messages, outcome_note: str = "", ending_type: str | None = None) -> JudgeReport:
-    from langchain_core.messages import SystemMessage
+    from langchain_core.messages import HumanMessage, SystemMessage
 
     llm = _get_chat(config.JUDGE_MODEL, temperature=0.2).with_structured_output(JudgeReport)
     msgs = [SystemMessage(content=_judge_system_prompt())]
     if outcome_note:
         msgs.append(SystemMessage(content=outcome_note))
-    msgs.extend(messages)
+    # 對話以「標明說話者的純文字」整包送出,而非原生 user/assistant 角色 —— 避免評審把奧客的話
+    # 誤算到店員頭上(good/bad_practices 引用、compliance 評分都靠正確的角色歸屬)。
+    msgs.append(HumanMessage(content=(
+        "以下是整場對話的逐句記錄,每句都已標明是「店員」還是「奧客」說的。\n"
+        "請只評估『店員』的表現,務必不要把『奧客』講的話當成店員的話來評分或引用:\n\n"
+        + _format_transcript(messages)
+    )))
     try:
         return _invoke_structured(llm, msgs)
     except Exception as err:  # noqa: BLE001

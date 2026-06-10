@@ -11,6 +11,8 @@ __pycache__/
 *.db-shm
 *.db-wal
 logs/
+# logs 遷移備份,本機保留、不進 repo
+logs_backup_*.tar.gz
 
 # 背景音樂:只 commit 轉好的 mp3(~12MB);原始 wav(~125MB)留本機、不進 repo
 music/*.wav

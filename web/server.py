@@ -322,8 +322,7 @@ def api_stall(req: StallReq):
             with _SESS_LOCK:
                 s = SESSIONS.get(req.thread_id)
                 if s and s.get("init"):
-                    s["init"]["anger"] = new_anger
-                    s["init"]["anger_history"] = [new_anger]
+                    s["init"]["anger"] = new_anger   # 只調怒氣;保留原始開局 anger_history,不覆蓋(M-A)
         return {"anger": new_anger, "ended": False,
                 "turn": base.get("turn", 0), "max_turns": base.get("max_turns", 8)}
 
@@ -331,8 +330,8 @@ def api_stall(req: StallReq):
     fail_state = {**base, "anger": 100, "ending_type": "fail"}
     end_out = nodes.set_ending(fail_state)                       # 取 fail 結局台詞 + emotion
     full_messages = list(base.get("messages") or []) + list(end_out["messages"])
-    anger_hist = list(base.get("anger_history") or []) + [100]   # 補上爆表的 100(給評審/存檔)
-    emo_hist = list(base.get("emotion_history") or []) + ["angry"]
+    anger_hist = list(base.get("anger_history") or []) + [100]   # 軌跡補爆表的 100(供評審/final_anger)
+    emo_hist = list(base.get("emotion_history") or [])           # 冷場不算有效回合 → 不補情緒(storage 用它算回合數,B2)
     report = nodes.judge({**base, "anger": 100, "ending_type": "fail",
                           "messages": full_messages, "anger_history": anger_hist})["report"]
     if has_state:

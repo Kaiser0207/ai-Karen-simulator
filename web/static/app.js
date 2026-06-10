@@ -443,6 +443,8 @@ async function startCustomer() {
 }
 
 function finishCustomer(d) {
+  if (STATE.finished) return;   // 冪等:stall 與 say 若同時結束,避免 finishCustomer 跑兩次(班次 results/計分重複)
+  STATE.finished = true;
   stopTurnTimer();
   $("#msg").disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
   const meta = SHIFT.queue[SHIFT.idx];
@@ -636,26 +638,33 @@ function onTimerExpire() {
 // 超時冷場 → 呼叫 /api/stall,讓顧客的「真實怒氣」+10(寫進後端);到 100 觸發砸店。不再只是畫面假裝。
 async function applyStall() {
   const myThread = STATE.thread;
+  // 比照 send():鎖住這段空窗,避免 stall await 期間玩家又送出 /api/say → 同 thread 並發 + 結局雙觸發
+  STATE.busy = true;
+  const input = $("#msg");
+  input.disabled = true; $("#send").disabled = true; $("#mic").disabled = true;
+  const unlock = () => { STATE.busy = false; input.disabled = false; $("#send").disabled = false; $("#mic").disabled = false; };
   try {
     const d = await api("/api/stall", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ thread_id: myThread }), timeoutMs: 30000,
     });
-    if (STATE.thread !== myThread) return;            // 已換關/離開 → 丟棄
+    if (STATE.thread !== myThread) return;            // 已換關/離開 → 丟棄(新客人會自管狀態)
     STATE.serverAnger = d.anger; STATE.anger = d.anger;
     updateMeter(d.anger, d.turn ?? STATE.turn, d.max_turns ?? STATE.maxTurns);
     setOkekeFace(emotionForAnger(d.anger));
-    if (d.ended) {                                    // 爆表 → 砸店收尾
+    if (d.ended) {                                    // 爆表 → 砸店收尾(維持鎖定,遊戲已結束)
       STATE.ended = true;
       addMessage("bot", d.ending_line, "奧客");
       MUSIC.stop(); SFX.buzzer();
       finishCustomer(d);
     } else {
+      unlock();
       toast("⏰ 時間到!你乾在那發呆,顧客真的更火了(怒氣 +10)");
       startTurnTimer();                               // 還沒爆 → 繼續計時施壓
     }
   } catch (e) {
     if (STATE.thread !== myThread) return;
+    unlock();
     toast(e.message);
     if (!STATE.ended && STATE.thread) startTurnTimer();   // 失敗別卡死,繼續計時
   }

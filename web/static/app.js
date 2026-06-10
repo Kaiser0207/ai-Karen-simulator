@@ -84,10 +84,10 @@ const SFX = (() => {
 // (瀏覽器自動播放限制:首次須使用者手勢才能出聲 → 見底部 unlockMusic。)
 const MUSIC = (() => {
   let on = true, cur = null, key = null, vol = 0.45;
-  let duckS = false, duckV = false;   // 兩個獨立壓低來源:設定開啟、歷史頁;任一成立就壓低
+  let duckS = false, duckV = false, duckR = false;   // 壓低來源:設定開啟 / 歷史頁 / 錄音中;任一成立就壓低
   const DUCK_RATIO = 0.12;   // 壓低時 = 主音量的 12%(隨音量滑桿一起縮放,不是固定值)
   const MASTER = 0.6;        // 全域主衰減:整體再小聲一點(所有輸出 ×此值;要更大/更小只調這顆)
-  const ducked = () => duckS || duckV;
+  const ducked = () => duckS || duckV || duckR;
   // 目前該播的背景音量:壓低時用「主音量 × DUCK_RATIO」,否則用該軌 base(預設=主音量)
   const bgTarget = (base) => (ducked() ? vol * DUCK_RATIO : (base != null ? base : vol));
   function applyDuck(ms) { if (cur && key !== "victory") fade(cur, bgTarget(cur._base || vol), ms || 250); }
@@ -156,6 +156,7 @@ const MUSIC = (() => {
     healed() { if (!on) return; try { const a = getAudio(F.healed); a.loop = false; a.volume = clamp01((bgTarget(vol) + vol * 0.35) * MASTER); try { a.currentTime = 0; } catch {} a.play().catch(() => {}); } catch {} },   // 跟主音量一起縮放 ×主衰減,且固定高背景一截
     duckSettings(d) { duckS = d; applyDuck(); },   // 設定開啟 → 壓低
     duckView(d) { duckV = d; applyDuck(); },        // 歷史頁 → 壓低
+    duckRec(d) { duckR = d; applyDuck(); },          // 錄音中 → 壓低(回音消除已關,避免音樂漏進 STT)
     stop() { key = null; const old = cur; cur = null; stopEl(old, 350); },
   };
 })();
@@ -703,14 +704,16 @@ async function toggleMic() {
   if (recording) { try { mediaRec && mediaRec.stop(); } catch {} return; }   // 第二下=手動結束
   if (STATE.busy || STATE.ended || !STATE.thread) return;
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { toast("無法使用麥克風,請檢查瀏覽器權限。"); return; }
+  MUSIC.duckRec(true);   // 先壓低背景樂:回音消除關掉後音樂才不會漏進錄音
+  // 關掉 echoCancellation —— 音樂在播時它的建立/收斂正是「開麥要等一下才收音」的主因;保留降噪/自動增益讓 STT 仍乾淨
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true } }); }
+  catch { MUSIC.duckRec(false); toast("無法使用麥克風,請檢查瀏覽器權限。"); return; }
   recChunks = [];
   mediaRec = new MediaRecorder(stream);
   mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
   mediaRec.onstop = async () => {
     stream.getTracks().forEach((t) => t.stop());
-    recording = false; mic.classList.remove("recording"); mic.textContent = "🎤";
+    recording = false; MUSIC.duckRec(false); mic.classList.remove("recording"); mic.textContent = "🎤";
     const blob = new Blob(recChunks, { type: mediaRec.mimeType || "audio/webm" });
     if (!blob.size) return;
     const input = $("#msg"), ph = input.placeholder;

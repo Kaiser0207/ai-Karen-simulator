@@ -9,7 +9,7 @@ const GENRE_STYLE = {
   "零售": { grad: "#b3c2ce", emoji: "🛍️" },   // 灰藍(由 #bfccd8 微調深;接近原色)
 };
 const styleFor = (g) => GENRE_STYLE[g] || { grad: "#798e7b", emoji: "😤" };  // AKARU 灰綠
-const angerColor = (a) => (a >= 70 ? "#FE494A" : a >= 40 ? "#f39c12" : "#2e9e6b");
+const angerColor = (a) => (a >= 80 ? "#FE494A" : a >= 60 ? "#f39c12" : "#2e9e6b");  // 對齊立繪表情:綠=happy/calm/neutral(<60)、橘=annoyed(60–79)、紅=angry(80+)
 
 // 難度 → 顏色 / 標籤 / 排序 / 休息態寬度(藍簡單最寬 → 綠困難最窄)。關卡顏色全程以難度為準。
 const DIFF_STYLE = {
@@ -30,7 +30,7 @@ function attachTone(node, emotion) {
   node.appendChild(el(`<span class="tone-badge tone-${b.cls}">🎙️ 語氣 · ${b.txt}</span>`));
 }
 const FACE_PREFIX = { angry: "ang", annoyed: "annoy", neutral: "neu", calm: "calm", happy: "hap" };
-const emotionForAnger = (a) => (a >= 80 ? "angry" : a >= 55 ? "annoyed" : a >= 30 ? "neutral" : a >= 10 ? "calm" : "happy");
+const emotionForAnger = (a) => (a >= 80 ? "angry" : a >= 60 ? "annoyed" : a >= 40 ? "neutral" : a >= 20 ? "calm" : "happy");  // 每階段 20 寬:0–19 happy/20–39 calm/40–59 neutral/60–79 annoyed/80–100 angry
 function setOkekeFace(emotion) {
   const f = $("#okeke-face"); if (!f) return;
   const emo = emotion || "neutral";
@@ -39,7 +39,7 @@ function setOkekeFace(emotion) {
   if (ch) {                                   // 有角色圖:用手繪;載不到(如 girl 還沒畫)→ onerror 退 emoji
     const src = `/characters/${FACE_PREFIX[emo] || "neu"}_${ch}.png`;
     f.classList.add("has-img");
-    f.innerHTML = `<img src="${src}" alt="" onerror="this.closest('.okeke-face').classList.remove('has-img');this.closest('.okeke-face').textContent='${FACE[emo] || "😐"}'">`;
+    f.innerHTML = `<img src="${src}" alt="" decoding="async" onerror="this.closest('.okeke-face').classList.remove('has-img');this.closest('.okeke-face').textContent='${FACE[emo] || "😐"}'">`;
   } else {
     f.classList.remove("has-img");
     f.textContent = FACE[emo] || "😐";
@@ -47,9 +47,17 @@ function setOkekeFace(emotion) {
   f.classList.remove("face-pop"); void f.offsetWidth; f.classList.add("face-pop");  // 重觸發動畫
 }
 // 開局先把這位角色的 5 張表情都預載進瀏覽器快取 → 換臉時瞬間切換,不再載入閃爍/卡頓
+const _faceCache = {};   // 保留 Image 參考:沒留參考的預載會被 GC 中途取消 → 這正是「有時候才慢」的主因
 function preloadFaces(ch) {
   if (!ch) return;
-  ["ang", "annoy", "neu", "calm", "hap"].forEach((p) => { const im = new Image(); im.src = `/characters/${p}_${ch}.png`; });
+  ["ang", "annoy", "neu", "calm", "hap"].forEach((p) => {
+    const src = `/characters/${p}_${ch}.png`;
+    if (_faceCache[src]) return;            // 已預載 → 跳過(去重,避免無限增長)
+    const im = new Image();
+    im.decoding = "async";
+    im.src = src;
+    _faceCache[src] = im;                   // 留參考 → 在途請求不被 GC 取消,確實進快取
+  });
 }
 // 空閒時把「全部角色 × 全部表情」都先載好 → 任何關卡開場、任何換臉都 0 延遲
 function preloadAllFaces() {

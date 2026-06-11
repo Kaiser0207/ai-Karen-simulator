@@ -44,6 +44,7 @@ python -m uvicorn api.ser_service:app --host 127.0.0.1 --port 8100
 | 3.5 | 對話存檔 + 歷史紀錄頁(對話/情緒/憤怒軌跡) | ✅ |
 | 4 | STT 語音輸入(faster-whisper,GPU) | ✅ |
 | 4.5 | 語音情緒辨識 SER(CRAB 4 類,獨立微服務)→ 玩家語氣影響奧客 | ✅ |
+| 4.7 | SER 雙語重訓(MSP 英 + EmotionTalk 中,LoRA)→ **中文 macro-F1 0.46→0.57(+24.5%)** | ✅ |
 | 4.6 | 寶可夢風背景音樂(大廳/戰鬥/勝利/Healed) | ✅ |
 | 5 | TTS 語音輸出(自研情緒模型) | ⬜ 規劃中 |
 
@@ -62,7 +63,7 @@ python -m uvicorn api.ser_service:app --host 127.0.0.1 --port 8100
 - **班次模式**:選難度 → 連續服務該難度多位客人 → 班次總結(平均分/連勝/總讓步成本/每位可展開);歷史頁同班次聚成一組
 - **設定移上方 nav、隨時可開**;壓力模式回合倒數 HUD(難度色、最後 5 秒紅閃滴答);立繪 4 套依怒氣換臉
 - **寶可夢風背景音樂**:首頁/歷史大廳曲循環、戰鬥曲依班次第幾位(野生/訓練家/道館)、和解勝利曲、進設定/歷史壓低 + Healed;音量滑桿(mp3、空閒預載)
-- **語音情緒辨識(SER)**:CRAB 雙模態 4 類(Angry/Happy/Neutral/Anxious)獨立微服務;玩家「語氣」影響奧客反應(語氣加成/打折);長語句依詞級時間戳切段加權
+- **語音情緒辨識(SER)**:CRAB 雙模態 4 類(Angry/Happy/Neutral/Anxious)獨立微服務;玩家「語氣」影響奧客反應(語氣加成/打折);長語句依詞級時間戳切段加權。**雙語重訓**(MSP 英 + EmotionTalk 中,XLS-R-300M + XLM-R-large + LoRA,train EN:ZH 2.5:1、語言平衡取樣、中文 dev 選 best)→ **中文 test macro-F1 0.46→0.57(+24.5%),四類全升**(詳見 `docs/簡報講稿.md` 附錄 C)
 - **LLM 供應商可切**(Gemini / Groq);撞額度回友善提示而非沉默
 - 單元 + 端對端測試(`tests/`,pytest;結局優先級、憤怒值夾限、mock 評分、整場流程)
 

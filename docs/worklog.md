@@ -292,4 +292,18 @@
 - **音量拉到 0 跳 45 修正**:`parseInt(v)||45` 把 0 當 falsy 的坑 → 改 `Number.isNaN` 判斷。
 - **音量偶發調不動**:`setVolume` 改即時直接設音量 + 先清進行中的淡入(不再被壓低/換軌淡入插隊)。
 - **整體小聲**:加全域主衰減 `MASTER=0.6`(背景/壓低/勝利/Healed 統一 ×0.6,單一旋鈕可調)。
+
+### SER 雙語 4 類重訓 + 部署(2026-06-11)
+**目標:中文情緒辨識最準**(原模型只用英文 MSP 訓練,中文靠跨語言遷移、會掉)。完整技術細節見 `docs/簡報講稿.md` 附錄 C。
+- **資料**:MSP-Podcast(英)+ EmotionTalk(中)雙語混訓。EmotionTalk 7 情緒→4 類,**撿回原本 3 類被丟掉的 anger+disgust(=Angry)**;中文文字 opencc **s2twp 轉繁體**對齊遊戲 STT。
+  - 新建 `scripts/build_emotiontalk_okeke4_csv.py`(中文 19250 筆)+ `scripts/build_okeke_bilingual_csv.py`(合併 63782 筆)。
+  - **train 比例 EN:ZH = 2.50:1**(MSP 每類砍到 9633、EmotionTalk 全收 15413)+ `--language_balanced` 每批 50:50。
+- **關鍵修正(對「中文最高」影響最大)**:訓練腳本原用「合併 dev(76% 英文)」選 best/早停 → 改成 **dev 只留中文(1908 筆)** → 以中文 macro-F1 為準挑檢查點。
+- **訓練**:XLS-R-300M + XLM-R-large + LoRA(r16/a32),batch24/accum2(有效48)、lr 2e-4(encoder 1e-4)、10 epoch/早停5、AMP+grad-ckpt。epoch 9 早停,best @ epoch4。~6 小時。
+- **結果(分語言評估,對照舊英文模型、同份中文 test)**:**中文 macro-F1 0.4587 → 0.5713(+24.5%)**、準確率 0.524→0.636、**四類全升**(Angry .62→.66 / Happy .35→.50 / Neutral .58→.71 / Anxious .28→.43)。英文 test 0.54(舊 ~0.63)為預期取捨,遊戲只用中文不影響。
+- **部署**:`okeke_infer.py` 換指向新模型(舊的留備援);重啟 SER 微服務 + web server、端到端 `/api/stt` 實測(中文 Angry→Angry 0.89);`/predict_pcm` 批量 60 筆準確率 0.60(對照全量 0.64)。
+
+### 立繪表情/血條對齊 + 圖片載入修正(2026-06-11)
+- **立繪表情階段化每 20 一階**(原本 10/30/55/80 不平均 → **0–19😄 / 20–39🙂 / 40–59😐 / 60–79😠 / 80–100😡**);**血條顏色對齊**(綠<60 / 橘60–79 / 紅80+),臉變 😡 與血條轉紅同步。純美觀,不碰勝負邏輯。
+- **圖片偶發載入慢修正**:立繪預載的 `new Image()` **沒留參考 → 被 GC 中途取消在途請求**(所以「有時候」才慢)→ 改用物件 `_faceCache` 保留參考 + 去重 + `decoding=async`。
 - **載入卡 UI 修正**:音樂 `<audio>` 由 `preload="auto"` 改 `"none"` —— 慢網路 / VS Code 埠轉發下,進關卡一次預載 6 個大 mp3 會佔滿瀏覽器 6 條連線、把 `/api/start` 與立繪卡在後面 → 卡片全空白、載入很久;改成要播才串流,UI 與 API 立刻通。
